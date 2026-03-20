@@ -84,7 +84,7 @@ class WatermarkExtension implements ExtensionInterface
                 'label'       => '水印文字',
                 'type'        => 'text',
                 'default'     => '',
-                'description' => '文字水印内容。中文水印需要配置 TTF 字体路径，否则会显示乱码。',
+                'description' => '文字水印内容',
                 'required'    => false,
             ],
             'font_size' => [
@@ -685,34 +685,64 @@ class WatermarkExtension implements ExtensionInterface
     }
 
     /**
-     * 带透明度的图片合并（imagecopymerge 不支持 alpha，需自定义实现）
+     * 带透明度的图片合并，正确支持 PNG 透明通道（imagecopymerge 会丢弃 alpha，不能直接使用）
+     *
+     * 原理：对 src 中每个像素的 alpha 值叠加全局不透明度后，
+     * 通过 imagecopy 合并到 dst——imagecopy 本身遵守逐像素 alpha，
+     * 因此可以正确保留水印 PNG 的透明区域。
      *
      * @param resource $dst
      * @param resource $src
-     * @param int      $pct 不透明度 0-100
+     * @param int      $pct 全局不透明度 0-100
      */
     private function imageCopyMergeAlpha($dst, $src, int $dstX, int $dstY, int $srcX, int $srcY, int $srcW, int $srcH, int $pct): void
     {
+        if ($pct <= 0) {
+            return;
+        }
+
         if ($pct >= 100) {
+            // imagecopy 会尊重逐像素 alpha，直接合并即可
+            imagealphablending($dst, true);
             imagecopy($dst, $src, $dstX, $dstY, $srcX, $srcY, $srcW, $srcH);
             return;
         }
 
-        // 创建临时图像，用于调整整体透明度
+        // 将 src 复制到临时画布，然后对每个像素的 alpha 叠加全局不透明度
+        // GD alpha: 0 = 完全不透明，127 = 完全透明
         $tmp = imagecreatetruecolor($srcW, $srcH);
         imagealphablending($tmp, false);
         imagesavealpha($tmp, true);
-
-        // 填充透明底
-        $transparent = imagecolorallocatealpha($tmp, 0, 0, 0, 127);
-        imagefill($tmp, 0, 0, $transparent);
-
-        // 把 src 的每个像素乘以 pct/100
+        // 初始化为完全透明
+        $clearColor = imagecolorallocatealpha($tmp, 0, 0, 0, 127);
+        imagefill($tmp, 0, 0, $clearColor);
+        // 复制源像素（保留 alpha）
         imagecopy($tmp, $src, 0, 0, $srcX, $srcY, $srcW, $srcH);
 
-        // 用 imagecopymerge 合并 tmp 到 dst
-        imagecopymerge($dst, $tmp, $dstX, $dstY, 0, 0, $srcW, $srcH, $pct);
+        // 对每个像素叠加全局不透明度：
+        //   原像素不透明度 = (127 - a) / 127
+        //   叠加后不透明度 = 原不透明度 * (pct / 100)
+        //   新 alpha       = 127 - round(新不透明度 * 127)
+        //                  = a + round((127 - a) * (100 - pct) / 100)
+        for ($y = 0; $y < $srcH; $y++) {
+            for ($x = 0; $x < $srcW; $x++) {
+                $color = imagecolorat($tmp, $x, $y);
+                $a = ($color >> 24) & 0x7F;
+                // 完全透明像素无需处理
+                if ($a >= 127) {
+                    continue;
+                }
+                $r    = ($color >> 16) & 0xFF;
+                $g    = ($color >>  8) & 0xFF;
+                $b    =  $color        & 0xFF;
+                $newA = $a + (int)round((127 - $a) * (100 - $pct) / 100);
+                imagesetpixel($tmp, $x, $y, imagecolorallocatealpha($tmp, $r, $g, $b, $newA));
+            }
+        }
 
+        // imagecopy 遵守逐像素 alpha，正确混合 PNG 透明区域
+        imagealphablending($dst, true);
+        imagecopy($dst, $tmp, $dstX, $dstY, 0, 0, $srcW, $srcH);
         imagedestroy($tmp);
     }
 }

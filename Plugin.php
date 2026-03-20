@@ -1,11 +1,11 @@
 <?php
 
 /**
- * PicUp for Typecho —— 多存储后端图片/附件上传插件，支持多种远程存储服务，多 Profile 通过 JSON 存储，可随时切换。
+ * PicUp for Typecho —— 多存储后端图片上传&处理插件，支持多种远程存储服务，多 Profile 通过 JSON 存储，可随时切换。
  *
  * @package PicUp
  * @author LHL
- * @version 1.0.0
+ * @version 1.0.1
  * @link https://github.com/lhl77/Typecho-Plugin-PicUp
  */
 
@@ -151,9 +151,22 @@ class Plugin implements PluginInterface
         // Typecho 中 admin/header.php 调用 ->filter('header', $header)，
         // 因此 hook 名为 'header'，而非 'filter'
         TypechoPlugin::factory('admin/header.php')->header = [__CLASS__, 'adminHeader'];
+
+        // 清除 PHP OPcache 缓存，确保插件文件更新后立即生效，无需手动重启 php-fpm
+        if (function_exists('opcache_reset')) {
+            opcache_reset();
+        } elseif (function_exists('apc_clear_cache')) {
+            apc_clear_cache();
+        }
     }
 
-    public static function deactivate() {}
+    public static function deactivate()
+    {
+        // 停用时同样清除缓存
+        if (function_exists('opcache_reset')) {
+            opcache_reset();
+        }
+    }
 
     /* ------------------------------------------------------------------ */
     /*  后台 Header 注入：上传提示 Toast                                  */
@@ -223,6 +236,12 @@ END_SCRIPT;
 
     public static function config(Form $form)
     {
+        // -1. OpenSSL / TLS 版本检测警告横幅
+        $sslWarningHtml = self::buildSslWarningHtml();
+        if ($sslWarningHtml) {
+            $form->addInput(new HtmlElement($sslWarningHtml));
+        }
+
         // 0. 顶部插件信息 & AdminBeautify 推荐
         $form->addInput(new HtmlElement(<<<'HTML'
 <style>
@@ -314,6 +333,69 @@ HTML));
     }
 
     public static function personalConfig(Form $form) {}
+
+    /**
+     * 检测服务器 OpenSSL 版本，若低于 TLS 1.2 兼容要求则返回警告横幅 HTML，否则返回空字符串。
+     * OpenSSL < 1.1.0 在连接 Cloudflare 等强制 TLS 1.2+ 的服务时会出现握手失败（errno=35）。
+     */
+    private static function buildSslWarningHtml(): string
+    {
+        // 获取 OpenSSL 版本号，格式如 "OpenSSL/1.0.2u" 或 "OpenSSL 1.0.2u ..."
+        $opensslVer = '';
+        if (defined('OPENSSL_VERSION_TEXT')) {
+            $opensslVer = OPENSSL_VERSION_TEXT; // e.g. "OpenSSL 1.0.2u  20 Dec 2019"
+        } elseif (function_exists('curl_version')) {
+            $cv = curl_version();
+            $opensslVer = $cv['ssl_version'] ?? ''; // e.g. "OpenSSL/1.0.2u"
+        }
+
+        if (empty($opensslVer)) {
+            return '';
+        }
+
+        // 从字符串中提取版本号，如 1.0.2u → 1.0.2
+        if (!preg_match('/(\d+)\.(\d+)\.(\d+)/i', $opensslVer, $m)) {
+            return '';
+        }
+        $major = (int)$m[1];
+        $minor = (int)$m[2];
+        // patch = $m[3]，暂不需要
+
+        // OpenSSL >= 1.1.0 才完整支持 TLS 1.2 默认协商
+        // OpenSSL 1.0.2 存在问题：默认握手可能被 Cloudflare 拒绝
+        $needsWarning = ($major < 1) || ($major === 1 && $minor < 1);
+
+        if (!$needsWarning) {
+            return '';
+        }
+
+        $verDisplay = htmlspecialchars($opensslVer);
+
+        return <<<HTML
+<style>
+.picup-ssl-warn{display:flex;align-items:flex-start;gap:12px;padding:14px 18px;margin:0 0 16px;border-radius:8px;border:1px solid #f97316;background:#fff7ed;color:#7c2d12;font-size:13px;line-height:1.6;}
+.picup-ssl-warn .picup-ssl-icon{font-size:22px;flex-shrink:0;margin-top:1px;}
+.picup-ssl-warn strong{color:#9a3412;}
+.picup-ssl-warn code{background:#fed7aa;padding:1px 5px;border-radius:4px;font-size:12px;}
+.picup-ssl-warn ul{margin:4px 0 0 18px;padding:0;}
+.picup-ssl-warn ul li{margin:2px 0;}
+</style>
+<div class="picup-ssl-warn">
+  <span class="picup-ssl-icon">⚠️</span>
+  <div>
+    <strong>服务器 OpenSSL 版本过低，可能导致部分图床上传失败</strong><br>
+    当前版本：<code>{$verDisplay}</code>（建议升级至 OpenSSL 1.1.0 及以上）<br>
+    <strong>影响：</strong>OpenSSL 1.0.x 默认使用 TLS 1.0/1.1 进行握手，而 Cloudflare 等 CDN 已强制要求最低 <strong>TLS 1.2</strong>，握手会被拒绝（错误码 35）。<br>
+    已受影响的图床：<strong>NodeImage</strong>（及其他使用 Cloudflare 的服务）。<br>
+    <strong>解决方式：</strong>
+    <ul>
+      <li>服务器上执行 <code>yum update openssl</code> / <code>apt upgrade openssl</code> 后重启 php-fpm</li>
+    </ul>
+    <em>插件已对此问题做临时修复（强制指定 TLS 1.2），若升级后仍有问题请查看 PHP error_log。</em>
+  </div>
+</div>
+HTML;
+    }
 
     /* ------------------------------------------------------------------ */
     /*  Upload Hooks                                                       */

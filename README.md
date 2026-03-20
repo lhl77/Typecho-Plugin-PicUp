@@ -42,7 +42,13 @@
 | **七牛云 KODO** | `qiniukodo` | 七牛云对象存储 |
 | **又拍云 USS** | `upyun` | 又拍云云存储 |
 | **EasyImage 简单图床** | `easyimage` | EasyImage 自建图床 |
-| **CloudFlare ImgBed** | `cfimgbed` | 基于 Cloudflare 的图床 |
+| **CloudFlare ImgBed** | `cfimgbed` | 基于 Cloudflare Workers 的图床 |
+| **NodeImage** | `nodeimage` | NodeImage 图床，通过 X-API-Key 认证 |
+| **Chevereto V4** | `cheveretoV4` | Chevereto V4 自建图床，支持相册 |
+| **Imgur** | `imgur` | Imgur 图床，支持匿名/账户上传 |
+| **初春图床 (OneImg)** | `oneimg` | 初春图床，Bearer Token 认证 |
+| **Telegram 图床** | `tgimagebed` | tg-imagebed 项目，支持匿名和 Token 上传 |
+| **Zpic 图床** | `zpic` | Zpic / ImgURL Pro，支持 V2/V3 API |
 
 ---
 
@@ -60,7 +66,38 @@
 
 ---
 
-## 🚀 安装
+## �️ 服务器要求
+
+| 项目 | 最低要求 | 说明 |
+|------|---------|------|
+| PHP | 7.4+ | 推荐 8.0+，需开启 `curl`、`json`、`fileinfo` 扩展 |
+| Typecho | 1.3.0+ | 需命名空间版本 |
+| OpenSSL | **1.1.0+** | 低于此版本可能导致连接 Cloudflare 等服务失败 |
+
+### ⚠️ OpenSSL 版本过低导致上传失败
+
+**症状**：上传到 NodeImage、Imgur 等通过 Cloudflare 保护的图床时，报错 `SSL routines:SSL23_GET_SERVER_HELLO:tlsv1 alert protocol version`（cURL 错误码 35）。
+
+**原因**：OpenSSL 1.0.x 默认使用 TLS 1.0/1.1 握手，Cloudflare 已强制要求 **TLS 1.2 最低版本**，握手被拒绝。
+
+**插件已内置临时修复**（强制指定 `CURLOPT_SSLVERSION = TLSv1_2`），但仍建议从根本上解决：
+
+```bash
+# CentOS / RHEL（宝塔服务器）
+yum update openssl
+
+# Debian / Ubuntu
+apt upgrade openssl
+
+# 升级后重启 php-fpm（宝塔面板可在软件商店直接升级 PHP 版本）
+systemctl restart php-fpm
+```
+
+设置页面会在检测到 OpenSSL < 1.1.0 时自动显示警告横幅。
+
+---
+
+## �🚀 安装
 
 ### 方式一：AB-Store 一键安装（推荐）
 
@@ -232,9 +269,89 @@ git clone https://github.com/lhl77/Typecho-Plugin-PicUp.git PicUp
 
 </details>
 
----
+<details>
+<summary><b>WebDAV</b></summary>
 
-## 🖼️ 扩展配置说明
+| 字段 | 说明 | 示例 |
+|------|------|------|
+| `server` | WebDAV 服务器地址 | `https://dav.example.com/path` |
+| `username` | 用户名 | |
+| `password` | 密码 | |
+| `urlPrefix` | 文件公开访问域名 | `https://cdn.example.com` |
+| `prefix` | 路径前缀（可选） | `images` |
+
+</details>
+
+<details>
+<summary><b>NodeImage</b></summary>
+
+| 字段 | 说明 |
+|------|------|
+| `api_key` | 在 NodeImage 后台获取的 API Key（通过 `X-API-Key` 请求头传递） |
+
+> **注意**：NodeImage 使用 Cloudflare 作为 CDN，服务器 OpenSSL 须 ≥ 1.1.0，否则 TLS 握手会被拒绝。
+
+</details>
+
+<details>
+<summary><b>Chevereto V4</b></summary>
+
+| 字段 | 说明 |
+|------|------|
+| `server` | Chevereto V4 站点地址，如 `https://pic.example.com` |
+| `api_key` | 在 Chevereto 后台「Dashboard → API」中获取的 API v1 Key |
+| `album_id` | 相册 ID（可选），上传至指定相册 |
+
+</details>
+
+<details>
+<summary><b>Imgur</b></summary>
+
+| 字段 | 说明 |
+|------|------|
+| `client_id` | 在 [Imgur API](https://api.imgur.com/oauth2/addclient) 注册应用后获取的 Client ID |
+| `access_token` | Access Token（可选），填写后上传到账户，留空则匿名上传 |
+| `album_hash` | 相册 deletehash（可选），需配合 Access Token 使用 |
+| `cdn` | CDN 替换域名（可选），将 `https://i.imgur.com` 替换为自定义域名 |
+
+</details>
+
+<details>
+<summary><b>初春图床 (OneImg)</b></summary>
+
+| 字段 | 说明 |
+|------|------|
+| `server` | 图床站点地址，如 `https://img.example.com` |
+| `token` | Bearer Token |
+| `bucket_id` | 存储桶 ID（可选） |
+| `url_prefix` | URL 前缀（可选），图床返回相对路径时拼接为完整 URL |
+
+</details>
+
+<details>
+<summary><b>Telegram 图床 (tg-imagebed)</b></summary>
+
+| 字段 | 说明 |
+|------|------|
+| `server` | 图床站点地址，如 `https://img.example.com` |
+| `token` | Token（可选），填写后使用认证上传（更高限额），留空则匿名上传 |
+
+</details>
+
+<details>
+<summary><b>Zpic 图床</b></summary>
+
+| 字段 | 说明 |
+|------|------|
+| `server` | 图床域名，如 `https://zpic.example.com` |
+| `api_version` | API 版本：`v3`（Bearer Token，推荐）或 `v2`（uid + token，兼容 ImgURL Pro） |
+| `token` | V3 的 Token（格式 `sk-xxx`）或 V2 的 Token |
+| `uid` | UID（仅 V2 需要） |
+| `album_id` | 相册 ID（可选） |
+
+</details>
+
+---
 
 ### 图片压缩
 
@@ -295,27 +412,33 @@ git clone https://github.com/lhl77/Typecho-Plugin-PicUp.git PicUp
 
 ```
 PicUp/
-├── Plugin.php                  # 插件主文件
+├── Plugin.php                      # 插件主文件
 ├── README.md
-├── vendor/                     # 存储驱动
-│   ├── DriverInterface.php     # 驱动接口
-│   ├── LocalDriver.php         # 本地存储
-│   ├── LskyDriver.php          # Lsky Pro
-│   ├── S3Driver.php            # AWS S3 兼容
-│   ├── WebDavDriver.php        # WebDAV
-│   ├── GithubDriver.php        # GitHub 仓库
-│   ├── SmmsDriver.php          # S.EE (SM.MS)
-│   ├── AliyunOssDriver.php     # 阿里云 OSS
-│   ├── TencentCosDriver.php    # 腾讯云 COS
-│   ├── QiniuKodoDriver.php     # 七牛云 KODO
-│   ├── UpyunDriver.php         # 又拍云
-│   ├── EasyimageDriver.php     # EasyImage
-│   └── CfimgbedDriver.php      # CF ImgBed
-└── extensions/                 # 图像处理扩展
-    ├── ExtensionInterface.php  # 扩展接口
-    ├── CompressExtension.php   # 图片压缩
-    ├── WebpExtension.php       # 自动转 WebP
-    └── WatermarkExtension.php  # 添加水印
+├── vendor/                         # 存储驱动
+│   ├── DriverInterface.php         # 驱动接口
+│   ├── LocalDriver.php             # 本地存储
+│   ├── LskyDriver.php              # Lsky Pro 兰空图床
+│   ├── S3Driver.php                # AWS S3 兼容（MinIO/R2/OSS 等）
+│   ├── WebDavDriver.php            # WebDAV
+│   ├── GithubDriver.php            # GitHub 仓库
+│   ├── SmmsDriver.php              # S.EE (SM.MS)
+│   ├── AliyunOssDriver.php         # 阿里云 OSS
+│   ├── TencentCosDriver.php        # 腾讯云 COS
+│   ├── QiniuKodoDriver.php         # 七牛云 KODO
+│   ├── UpyunDriver.php             # 又拍云
+│   ├── EasyimageDriver.php         # EasyImage 简单图床
+│   ├── CfimgbedDriver.php          # CloudFlare ImgBed
+│   ├── NodeimageDriver.php         # NodeImage 图床
+│   ├── CheveretoV4Driver.php       # Chevereto V4 自建图床
+│   ├── ImgurDriver.php             # Imgur 图床
+│   ├── OneimgDriver.php            # 初春图床 (OneImg)
+│   ├── TgImagebedDriver.php        # Telegram 图床 (tg-imagebed)
+│   └── ZpicDriver.php              # Zpic / ImgURL Pro
+└── extensions/                     # 图像处理扩展
+    ├── ExtensionInterface.php      # 扩展接口
+    ├── CompressExtension.php       # 图片压缩
+    ├── WebpExtension.php           # 自动转 WebP
+    └── WatermarkExtension.php      # 添加水印
 ```
 
 ---
