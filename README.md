@@ -10,7 +10,7 @@
 [![License](https://img.shields.io/github/license/lhl77/Typecho-Plugin-PicUp?color=blue)](LICENSE)
 [![Stars](https://img.shields.io/github/stars/lhl77/Typecho-Plugin-PicUp?style=flat&logo=github)](https://github.com/lhl77/Typecho-Plugin-PicUp/stargazers)
 
-**作者：[LHL](https://blog.lhl.one)　|　[使用文档](https://blog.lhl.one/artical/1026.html)　|　[GitHub](https://github.com/lhl77/Typecho-Plugin-PicUp)**
+**作者：[LHL](https://blog.lhl.one)　|　[GitHub](https://github.com/lhl77/Typecho-Plugin-PicUp)**
 
 ## [截图、插件开发指南、SDK接入指南](https://blog.lhl.one/artical/1026.html)
 
