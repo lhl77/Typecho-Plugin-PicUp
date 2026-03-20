@@ -12,6 +12,8 @@
 
 **作者：[LHL](https://blog.lhl.one)　|　[使用文档](https://blog.lhl.one/artical/1026.html)　|　[GitHub](https://github.com/lhl77/Typecho-Plugin-PicUp)**
 
+## [截图、插件开发指南、SDK接入指南](https://blog.lhl.one/artical/1026.html)
+
 </div>
 
 ---
