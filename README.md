@@ -12,10 +12,10 @@
 
 **作者：[LHL](https://blog.lhl.one)　|　[GitHub](https://github.com/lhl77/Typecho-Plugin-PicUp)**
 
-## [截图、插件开发指南、SDK接入指南](https://blog.lhl.one/artical/1026.html)
-
 </div>
 
+---
+## [截图、插件开发指南、SDK接入指南](https://blog.lhl.one/artical/1026.html)
 ---
 
 ## ✨ 功能特性
