@@ -5,7 +5,7 @@
  *
  * @package PicUp
  * @author LHL
- * @version 1.0.1
+ * @version 1.1.0
  * @link https://github.com/lhl77/Typecho-Plugin-PicUp
  */
 
@@ -18,7 +18,9 @@ use Typecho\Widget\Helper\Form\Element\Text;
 use Typecho\Config;
 use Typecho\Common;
 use Typecho\Date;
+use Typecho\Db;
 use Typecho\Plugin as TypechoPlugin;
+use Utils\Helper;
 use Widget\Options;
 
 if (!defined('__TYPECHO_ROOT_DIR__')) {
@@ -148,11 +150,15 @@ class Plugin implements PluginInterface
         TypechoPlugin::factory('Widget\\Upload')->attachmentHandle = [__CLASS__, 'attachmentHandle'];
 
         // 注入后台 header：上传 Toast 提示
-        // Typecho 中 admin/header.php 调用 ->filter('header', $header)，
-        // 因此 hook 名为 'header'，而非 'filter'
         TypechoPlugin::factory('admin/header.php')->header = [__CLASS__, 'adminHeader'];
 
-        // 清除 PHP OPcache 缓存，确保插件文件更新后立即生效，无需手动重启 php-fpm
+        // 注册备份 Action
+        Helper::addAction('picup-backup', __NAMESPACE__ . '\\Action');
+
+        // 建备份表（若不存在）
+        self::createBackupTable();
+
+        // 清除 PHP OPcache 缓存，确保插件文件更新后立即生效
         if (function_exists('opcache_reset')) {
             opcache_reset();
         } elseif (function_exists('apc_clear_cache')) {
@@ -162,9 +168,36 @@ class Plugin implements PluginInterface
 
     public static function deactivate()
     {
+        // 移除备份 Action 路由
+        Helper::removeAction('picup-backup');
+
         // 停用时同样清除缓存
         if (function_exists('opcache_reset')) {
             opcache_reset();
+        }
+    }
+
+    /**
+     * 创建备份表 {prefix}_PicUpBackup（若不存在则建表）
+     */
+    private static function createBackupTable(): void
+    {
+        try {
+            $db    = Db::get();
+            $table = $db->getPrefix() . 'PicUpBackup';
+            $db->query(
+                "CREATE TABLE IF NOT EXISTS `{$table}` ("
+                . "`id`              INT          NOT NULL AUTO_INCREMENT, "
+                . "`label`           VARCHAR(255) NOT NULL DEFAULT '', "
+                . "`config_json`     MEDIUMTEXT   NOT NULL, "
+                . "`default_profile` VARCHAR(128) NOT NULL DEFAULT 'default', "
+                . "`backup_date`     DATETIME     NOT NULL, "
+                . "PRIMARY KEY (`id`)"
+                . ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;",
+                Db::WRITE
+            );
+        } catch (\Exception $e) {
+            error_log('[PicUp] 创建备份表失败：' . $e->getMessage());
         }
     }
 
@@ -263,6 +296,7 @@ END_SCRIPT;
       <a href="https://github.com/lhl77/Typecho-Plugin-PicUp" target="_blank">GitHub</a>　|　
       <a href="https://blog.lhl.one/artical/1026.html" target="_blank">使用文档</a>
     </p>
+    <p>版本：v1.1.0</p>
   </div>
   <div class="picup-info-card picup-ab-card">
     <h4>✨ 推荐安装 Admin Beautify<span class="ab-badge">AB-Store</span></h4>
@@ -330,6 +364,15 @@ HTML));
             'width:100%;max-width:800px;height:300px;font-family:monospace;font-size:13px;'
         );
         $form->addInput($configJson);
+
+        // 4. 备份管理区域
+        $form->addInput(new HtmlElement(self::buildBackupHtml()));
+
+        // -0. 备份数据表缺失警告横幅
+        $dbWarningHtml = self::buildDbWarningHtml();
+        if ($dbWarningHtml) {
+            $form->addInput(new HtmlElement($dbWarningHtml));
+        }
     }
 
     public static function personalConfig(Form $form) {}
@@ -387,11 +430,53 @@ HTML));
     当前版本：<code>{$verDisplay}</code>（建议升级至 OpenSSL 1.1.0 及以上）<br>
     <strong>影响：</strong>OpenSSL 1.0.x 默认使用 TLS 1.0/1.1 进行握手，而 Cloudflare 等 CDN 已强制要求最低 <strong>TLS 1.2</strong>，握手会被拒绝（错误码 35）。<br>
     已受影响的图床：<strong>NodeImage</strong>（及其他使用 Cloudflare 的服务）。<br>
-    <strong>解决方式：</strong>
-    <ul>
-      <li>服务器上执行 <code>yum update openssl</code> / <code>apt upgrade openssl</code> 后重启 php-fpm</li>
-    </ul>
-    <em>插件已对此问题做临时修复（强制指定 TLS 1.2），若升级后仍有问题请查看 PHP error_log。</em>
+  </div>
+</div>
+HTML;
+    }
+
+    /**
+     * 检测备份数据表是否存在，若不存在则返回提示横幅 HTML，否则返回空字符串。
+     * 表缺失通常意味着插件是从旧版升级而来，未经历 activate() 建表流程。
+     */
+    private static function buildDbWarningHtml(): string
+    {
+        try {
+            $db    = Db::get();
+            $table = $db->getPrefix() . 'PicUpBackup';
+
+            // 用 SHOW TABLES LIKE 判断表是否存在（兼容 MySQL / MariaDB）
+            $row = $db->fetchRow(
+                $db->query("SHOW TABLES LIKE '{$table}'", Db::READ)
+            );
+            if ($row) {
+                return '';
+            }
+        } catch (\Exception $e) {
+            // 查询报错（其他 DB 错误）→ 显示警告
+        }
+
+        return <<<'HTML'
+<style>
+.picup-db-warn{display:flex;align-items:flex-start;gap:12px;padding:14px 18px;margin:0 0 16px;
+  border-radius:8px;border:1px solid #dc2626;background:#fef2f2;color:#7f1d1d;font-size:13px;line-height:1.6;}
+.picup-db-warn .picup-db-icon{font-size:22px;flex-shrink:0;margin-top:1px;}
+.picup-db-warn strong{color:#991b1b;}
+.picup-db-warn code{background:#fecaca;padding:1px 5px;border-radius:4px;font-size:12px;}
+.picup-db-warn ol{margin:6px 0 0 18px;padding:0;}
+.picup-db-warn ol li{margin:3px 0;}
+</style>
+<div class="picup-db-warn">
+  <span class="picup-db-icon">🗄️</span>
+  <div>
+    <strong>备份数据表不存在，配置备份功能暂不可用</strong><br>
+    检测到数据库中缺少 <code>{prefix}PicUpBackup</code> 表，这通常发生在插件从旧版直接升级后未经过完整的启用流程。<br>
+    <ol>
+      <li>前往 <strong>控制台 → 插件管理</strong>，找到 <strong>PicUp</strong></li>
+      <li>点击「<strong>禁用</strong>」</li>
+      <li>再点击「<strong>启用</strong>」</li>
+      <li>重新打开本设置页即可正常使用备份功能</li>
+    </ol>
   </div>
 </div>
 HTML;
@@ -760,6 +845,167 @@ HTML;
                 'urlPrefix'   => '',
             ],
         ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    }
+
+    /**
+     * 构建 JSON 配置区下方的备份管理区域 HTML
+     */
+    private static function buildBackupHtml(): string
+    {
+        try {
+            $options  = \Widget\Options::alloc();
+            $security = \Typecho\Widget::widget('Widget\\Security');
+            $ajaxUrl  = \Typecho\Common::url('/action/picup-backup', $options->index);
+            $token    = $security->getToken($ajaxUrl);
+        } catch (\Exception $e) {
+            return '';
+        }
+
+        $ajaxUrlEsc = htmlspecialchars($ajaxUrl);
+        $tokenEsc   = htmlspecialchars($token);
+
+        return <<<HTML
+<ul class="typecho-option" id="typecho-option-item-picup-backup"><li>
+<label class="typecho-label">配置备份 (先保存设置后备份)</label>
+<div id="picup-backup-wrap" data-url="{$ajaxUrlEsc}" data-token="{$tokenEsc}">
+<style>
+#picup-backup-wrap{max-width:800px;}
+.pb-toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;}
+.pb-btn{padding:6px 14px;min-height:32px;border:none;border-radius:5px;font-size:12px;
+  cursor:pointer;white-space:nowrap;transition:opacity .15s;display:inline-flex;align-items:center;gap:4px;}
+.pb-btn:hover{opacity:.85;}
+.pb-btn:active{transform:scale(.97);}
+.pb-btn-primary{background:#6750a4;color:#fff;}
+.pb-btn-restore{background:#2563eb;color:#fff;}
+.pb-btn-del{background:#b3261e;color:#fff;}
+.pb-btn:disabled{opacity:.45;cursor:not-allowed;}
+.pb-label-wrap{display:flex;align-items:center;gap:6px;}
+.pb-label-inp{border:1px solid #c5cad3;border-radius:5px;padding:5px 9px;
+  font-size:12px;min-width:180px;color:#1a1a1a;background:#fff;}
+.pb-list{border:1px solid #e4e7eb;border-radius:6px;overflow:hidden;margin-top:4px;}
+.pb-list-head{display:grid;grid-template-columns:1fr 110px 90px 86px;gap:0;
+  background:#f0f2f5;font-size:12px;font-weight:600;color:#6b7280;padding:7px 10px;}
+.pb-list-row{display:grid;grid-template-columns:1fr 110px 90px 86px;gap:0;
+  font-size:12px;padding:7px 10px;border-top:1px solid #f0f2f5;align-items:center;color:#374151;}
+.pb-list-row:hover{background:#fafafa;}
+.pb-row-label{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:6px;}
+.pb-row-date{color:#6b7280;font-size:11px;}
+.pb-row-profile{color:#6750a4;font-size:11px;font-weight:600;}
+.pb-row-actions{display:flex;gap:4px;}
+.pb-empty{padding:20px;text-align:center;color:#9ca3af;font-size:13px;}
+.pb-status{margin:8px 0 0;font-size:12px;min-height:18px;color:#6750a4;}
+[data-theme="dark"] .pb-list{border-color:#3a3740;}
+[data-theme="dark"] .pb-list-head{background:#2b2930;color:#938f99;}
+[data-theme="dark"] .pb-list-row{border-top-color:#3a3740;color:#cac4d0;}
+[data-theme="dark"] .pb-list-row:hover{background:#1c1b1f;}
+[data-theme="dark"] .pb-label-inp{border-color:#49454f;background:#2b2930;color:#e6e1e5;}
+@media(max-width:600px){
+  .pb-list-head,.pb-list-row{grid-template-columns:1fr 80px 70px;}
+  .pb-head-profile,.pb-row-profile{display:none;}
+}
+</style>
+<div class="pb-toolbar">
+  <div class="pb-label-wrap">
+    <input type="text" id="pb-label-inp" class="pb-label-inp" placeholder="备份名称（留空自动生成）">
+  </div><br/>
+  <button type="button" class="pb-btn pb-btn-primary" id="pb-backup-btn">💾 备份当前配置</button>
+  <button type="button" class="pb-btn pb-btn-restore" id="pb-restore-btn" disabled>↩ 从数据库中恢复</button>
+  <button type="button" class="pb-btn pb-btn-del" id="pb-del-btn" disabled>🗑 删除备份</button>
+</div>
+<div id="pb-list-wrap">
+  <div class="pb-empty">加载中…</div>
+</div>
+<p class="pb-status" id="pb-status"></p>
+</div>
+<script>
+(function(){
+  var wrap=document.getElementById('picup-backup-wrap');
+  var url=wrap.dataset.url; var token=wrap.dataset.token; var selId=0;
+  var btnBackup=document.getElementById('pb-backup-btn');
+  var btnRestore=document.getElementById('pb-restore-btn');
+  var btnDel=document.getElementById('pb-del-btn');
+  var status=document.getElementById('pb-status');
+  var labelInp=document.getElementById('pb-label-inp');
+  function post(doName,extra,cb){
+    var fd=new FormData(); fd.append('do',doName); fd.append('_',token);
+    if(extra) Object.keys(extra).forEach(function(k){ fd.append(k,extra[k]); });
+    fetch(url,{method:'POST',body:fd}).then(function(r){return r.json();}).then(cb)
+      .catch(function(e){setStatus('请求失败：'+e,true);});
+  }
+  function setStatus(msg,isErr){
+    status.style.color=isErr?'#b3261e':'#6750a4'; status.textContent=msg;
+    if(!isErr) setTimeout(function(){if(status.textContent===msg)status.textContent='';},3500);
+  }
+  function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+  function renderList(list){
+    var w=document.getElementById('pb-list-wrap');
+    if(!list||!list.length){w.innerHTML='<div class="pb-empty">暂无备份记录</div>';selId=0;updateBtns();return;}
+    var html='<div class="pb-list"><div class="pb-list-head"><span>备份名称</span><span>备份时间</span><span>使用方案</span><span></span></div>';
+    list.forEach(function(row){
+      var isSel=(parseInt(row.id)===selId);
+      html+='<div class="pb-list-row" data-id="'+row.id+'" style="'+(isSel?'background:#f3f0fb;outline:2px solid #6750a4;outline-offset:-2px;border-radius:4px;':'')+'">'
+        +'<span class="pb-row-label" title="'+esc(row.label)+'">'+esc(row.label)+'</span>'
+        +'<span class="pb-row-date">'+esc(row.backup_date)+'</span>'
+        +'<span class="pb-row-profile">'+esc(row.default_profile)+'</span>'
+        +'<span class="pb-row-actions"></span></div>';
+    });
+    html+='</div>';
+    w.innerHTML=html;
+    w.querySelectorAll('.pb-list-row').forEach(function(el){
+      el.style.cursor='pointer';
+      el.addEventListener('click',function(){selId=parseInt(this.dataset.id);renderList(list);updateBtns();});
+    });
+  }
+  function updateBtns(){var has=selId>0;btnRestore.disabled=!has;btnDel.disabled=!has;}
+  function loadList(){
+    post('list',{},function(res){
+      if(res.code===0){renderList(res.data.list||[]);}
+      else{document.getElementById('pb-list-wrap').innerHTML='<div class="pb-empty">加载失败：'+esc(res.message)+'</div>';}
+    });
+  }
+  btnBackup.addEventListener('click',function(){
+    var label=labelInp.value.trim(); btnBackup.disabled=true;
+    post('backup',label?{label:label}:{},function(res){
+      btnBackup.disabled=false;
+      if(res.code===0){setStatus('✅ '+res.message);labelInp.value='';selId=res.data.id||0;loadList();}
+      else{setStatus('❌ '+res.message,true);}
+    });
+  });
+  btnRestore.addEventListener('click',function(){
+    if(!selId) return;
+    if(!confirm('确定要从该备份中恢复配置吗？当前未保存的修改将被覆盖，恢复后请点击页面下方的「保存设置」。')) return;
+    post('restore',{id:selId},function(res){
+      if(res.code===0){
+        setStatus('✅ '+res.message);
+        var ta=document.querySelector('textarea[name="configJson"]');
+        var dp=document.querySelector('input[name="defaultProfile"]');
+        if(ta&&res.data.config_json){ta.value=res.data.config_json;ta.dispatchEvent(new Event('blur'));}
+        if(dp&&res.data.default_profile){dp.value=res.data.default_profile;}
+      } else {setStatus('❌ '+res.message,true);}
+    });
+  });
+  btnDel.addEventListener('click',function(){
+    if(!selId) return;
+    if(!confirm('确定删除此条备份？此操作不可撤销。')) return;
+    post('delete',{id:selId},function(res){
+      if(res.code===0){setStatus('✅ 删除成功');selId=0;loadList();}
+      else{setStatus('❌ '+res.message,true);}
+    });
+  });
+  // AdminBeautify AJAX 导航适配：监听 ab:pageload 事件，支持无刷新页面切换
+  // （脚本中含 'ab:pageload' 字符串，可通过 AdminBeautify 兼容性检测，不再弹出警告）
+  if(window._pbNavHandler) document.removeEventListener('ab:pageload',window._pbNavHandler);
+  window._pbNavHandler=function(){ var el=document.getElementById('picup-backup-wrap'); if(el) loadList(); };
+  document.addEventListener('ab:pageload',window._pbNavHandler);
+  // 常规初始化路径（AdminBeautify AJAX 导航激活时由 ab:pageload 驱动，避免重复加载）
+  if(!window.AdminBeautify||!window.AdminBeautify._ajaxNavActive){
+    if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',loadList);}
+    else{loadList();}
+  }
+})();
+</script>
+</li></ul>
+HTML;
     }
 
     private static function buildGuiHtml(array $driversMeta, array $extensionsMeta = []): string

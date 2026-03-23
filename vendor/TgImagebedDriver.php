@@ -25,7 +25,7 @@ class TgImagebedDriver implements DriverInterface
 
     public static function getName(): string
     {
-        return 'Telegram 图床 (tg-imagebed)';
+        return 'TG-Imagebed (xiyan520)';
     }
 
     public static function getConfigFields(): array

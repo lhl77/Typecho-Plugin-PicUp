@@ -49,7 +49,9 @@ class CheveretoV4Driver implements DriverInterface
                 'label'       => '相册 ID（可选）',
                 'type'        => 'text',
                 'default'     => '',
-                'description' => '上传到指定相册，填写相册 ID（字母+数字），留空则不归入相册',
+                'description' => '上传到指定相册，填写相册 URL 中的字母数字 ID。'
+                    . '打开相册页面，地址栏形如 https://pic.example.com/album/a1B2c3，此处填写 a1B2c3。'
+                    . '注意：不是管理后台中的数字 ID，必须为 URL 中的 base62 编码值，区分大小写，留空则不归入相册。',
                 'required'    => false,
             ],
         ];
@@ -73,9 +75,10 @@ class CheveretoV4Driver implements DriverInterface
             'format'  => 'json',
         ];
 
-        $albumId = $this->config['album_id'] ?? '';
-        if (!empty($albumId)) {
+        $albumId = trim($this->config['album_id'] ?? '');
+        if ($albumId !== '') {
             $postFields['album_id'] = $albumId;
+            error_log('[PicUp][CheveretoV4] 上传到相册 album_id=' . $albumId);
         }
 
         $response = $this->curlPost($url, $postFields);
