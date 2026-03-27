@@ -5,7 +5,7 @@
  *
  * @package PicUp
  * @author LHL
- * @version 1.1.1
+ * @version 1.1.2
  * @link https://github.com/lhl77/Typecho-Plugin-PicUp
  */
 
@@ -296,7 +296,7 @@ END_SCRIPT;
       <a href="https://github.com/lhl77/Typecho-Plugin-PicUp" target="_blank">GitHub</a>　|　
       <a href="https://blog.lhl.one/artical/1026.html" target="_blank">使用文档</a>
     </p>
-    <p>版本：v1.1.1</p>
+    <p>版本：v1.1.2</p>
   </div>
   <div class="picup-info-card picup-ab-card">
     <h4>✨ 推荐安装 Admin Beautify<span class="ab-badge">AB-Store</span></h4>
@@ -506,9 +506,11 @@ HTML;
     private static function shouldHandleFile(array $file, string $ext): bool
     {
         try {
-            $picupOpts = \Typecho\Widget::widget('Widget_Options')->plugin('PicUp');
-            $mimeScope = isset($picupOpts->mimeScope) ? (string)$picupOpts->mimeScope : 'image';
-        } catch (\Exception $e) {
+            $picupOpts = Options::alloc()->plugin('PicUp');
+            // 注意：Typecho Config 类只实现了 __isSet()（大写 S）而非 PHP 标准 __isset()，
+            // 因此 isset($obj->prop) 永远返回 false。必须直接调用 __get() 读取真实值。
+            $mimeScope = (string)($picupOpts->mimeScope) ?: 'image';
+        } catch (\Throwable $e) {
             $mimeScope = 'image';
         }
 
@@ -554,9 +556,11 @@ HTML;
             return false;
         }
 
-        // 文件接管范围检查：'image' 模式下仅处理图片，其余交由 Typecho 默认处理器
+        // 文件接管范围检查：'image' 模式下仅处理图片，其余执行本地存储
+        // 注意：不能直接 return false —— Typecho Plugin::call() 会将 signal 无条件置为 true，
+        // 导致默认本地存储逻辑被跳过，上传彻底失败。必须自行完成本地存储并返回结果数组。
         if (!self::shouldHandleFile($file, $ext)) {
-            return false;
+            return self::_localUpload($file, $ext);
         }
 
         $driver = self::getDriver();
@@ -622,9 +626,10 @@ HTML;
             return false;
         }
 
-        // 文件接管范围检查
+        // 文件接管范围检查：'image' 模式下仅处理图片，其余执行本地存储
+        // 同 uploadHandle，不能 return false，须自行完成本地存储。
         if (!self::shouldHandleFile($file, $ext)) {
-            return false;
+            return self::_localUpload($file, $ext);
         }
 
         $driver = self::getDriver();
@@ -695,11 +700,6 @@ HTML;
 
     public static function deleteHandle(array $content): bool
     {
-        $driver = self::getDriver();
-        if (!$driver) {
-            return false;
-        }
-
         $path = '';
         if (isset($content['attachment'])) {
             $path = is_object($content['attachment'])
@@ -707,14 +707,43 @@ HTML;
                 : ($content['attachment']['path'] ?? '');
         }
 
-        return !empty($path) && $driver->delete($path);
+        if (empty($path)) {
+            return false;
+        }
+
+        // 本地路径（以 / 开头）：交由本地文件系统删除，不走远程驱动
+        if ($path[0] === '/') {
+            $root = defined('__TYPECHO_UPLOAD_ROOT_DIR__') ? __TYPECHO_UPLOAD_ROOT_DIR__ : __TYPECHO_ROOT_DIR__;
+            return @unlink(rtrim($root, '/') . $path);
+        }
+
+        $driver = self::getDriver();
+        if (!$driver) {
+            return false;
+        }
+
+        return $driver->delete($path);
     }
 
     public static function attachmentHandle(Config $attachment): string
     {
+        $path = (string)($attachment->path ?? '');
+        if (empty($path)) {
+            return '';
+        }
+
+        // 本地路径（以 / 开头）：模拟 Typecho 默认行为，拼接站点 URL
+        if ($path[0] === '/') {
+            $options = Options::alloc();
+            return Common::url(
+                $path,
+                defined('__TYPECHO_UPLOAD_URL__') ? __TYPECHO_UPLOAD_URL__ : $options->siteUrl
+            );
+        }
+
+        // 远程路径（完整 URL 或驱动专属格式）：使用 PicUp 驱动生成访问 URL
         $driver = self::getDriver();
-        $path   = $attachment->path ?? '';
-        if (!$driver || empty($path)) {
+        if (!$driver) {
             return $path;
         }
         return $driver->getUrl($path);
@@ -817,6 +846,65 @@ HTML;
         }
 
         return [$localFile, $mimeType, $tmpCreated];
+    }
+
+    /**
+     * 将文件存储到 Typecho 本地上传目录（复现 Widget\Upload 内置存储逻辑）。
+     * 当 mimeScope='image' 且当前文件非图片时，由此方法完成本地存储，
+     * 避免 Typecho Plugin::call() signal 机制导致上传彻底失败。
+     *
+     * @param array  $file 上传文件数组（含 name, size, tmp_name 等键）
+     * @param string $ext  文件扩展名（已 getSafeName 处理）
+     * @return array|false 成功返回与 uploadHandle 一致的结果数组，失败返回 false
+     */
+    private static function _localUpload(array $file, string $ext)
+    {
+        $uploadDir  = defined('__TYPECHO_UPLOAD_DIR__')      ? __TYPECHO_UPLOAD_DIR__      : \Widget\Upload::UPLOAD_DIR;
+        $uploadRoot = defined('__TYPECHO_UPLOAD_ROOT_DIR__') ? __TYPECHO_UPLOAD_ROOT_DIR__ : __TYPECHO_ROOT_DIR__;
+
+        $date    = new Date();
+        $absDir  = Common::url($uploadDir, $uploadRoot) . '/' . $date->year . '/' . $date->month;
+
+        if (!is_dir($absDir) && !@mkdir($absDir, 0755, true)) {
+            error_log('[PicUp] _localUpload: 无法创建上传目录 ' . $absDir);
+            return false;
+        }
+
+        $fileName = sprintf('%u', crc32(uniqid())) . '.' . $ext;
+        $absPath  = $absDir . '/' . $fileName;
+        $relPath  = $uploadDir . '/' . $date->year . '/' . $date->month . '/' . $fileName;
+
+        if (isset($file['tmp_name']) && $file['tmp_name']) {
+            if (!@move_uploaded_file($file['tmp_name'], $absPath)) {
+                error_log('[PicUp] _localUpload: move_uploaded_file 失败');
+                return false;
+            }
+        } elseif (isset($file['bytes'])) {
+            if (file_put_contents($absPath, $file['bytes']) === false) {
+                error_log('[PicUp] _localUpload: file_put_contents(bytes) 失败');
+                return false;
+            }
+        } elseif (isset($file['bits'])) {
+            if (file_put_contents($absPath, $file['bits']) === false) {
+                error_log('[PicUp] _localUpload: file_put_contents(bits) 失败');
+                return false;
+            }
+        } else {
+            error_log('[PicUp] _localUpload: 无可用文件内容（tmp_name/bytes/bits 均为空）');
+            return false;
+        }
+
+        if (!isset($file['size'])) {
+            $file['size'] = filesize($absPath);
+        }
+
+        return [
+            'name' => $file['name'],
+            'path' => $relPath,
+            'size' => $file['size'],
+            'type' => $ext,
+            'mime' => Common::mimeContentType($absPath),
+        ];
     }
 
     private static function getSafeName(string &$name): string
