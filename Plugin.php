@@ -5,7 +5,7 @@
  *
  * @package PicUp
  * @author LHL
- * @version 1.1.0
+ * @version 1.1.1
  * @link https://github.com/lhl77/Typecho-Plugin-PicUp
  */
 
@@ -290,7 +290,7 @@ END_SCRIPT;
 </style>
 <div class="picup-info-bar">
   <div class="picup-info-card">
-    <h4>📦 PicUp — 多存储后端图片上传&处理插件</h4>
+    <h4>📦 PicUp — 多存储后端上传&处理插件</h4>
     <p>
       作者：<a href="https://blog.lhl.one" target="_blank">LHL</a>　|　
       <a href="https://github.com/lhl77/Typecho-Plugin-PicUp" target="_blank">GitHub</a>　|　
@@ -373,6 +373,19 @@ HTML));
         if ($dbWarningHtml) {
             $form->addInput(new HtmlElement($dbWarningHtml));
         }
+        
+        // 1-b. 文件接管范围（全局设置，不随方案切换）
+        $mimeScope = new \Typecho\Widget\Helper\Form\Element\Radio(
+            'mimeScope',
+            [
+                'image' => _t('只接管图片（gif jpg jpeg png bmp tiff webp avif svg）'),
+                'all'   => _t('接管所有文件（图片 + 多媒体 + 文档等）'),
+            ],
+            'image',
+            _t('文件接管范围'),
+            _t('选择「只接管图片」时，PicUp 仅处理图片类型的上传；其他类型文件将交由 Typecho 默认处理器接管（存储到本地服务器）。')
+        );
+        $form->addInput($mimeScope);
     }
 
     public static function personalConfig(Form $form) {}
@@ -486,6 +499,44 @@ HTML;
     /*  Upload Hooks                                                       */
     /* ------------------------------------------------------------------ */
 
+    /**
+     * 根据「文件接管范围」设置判断本次文件是否应由 PicUp 处理。
+     * 返回 false 时交由 Typecho 默认处理器接管（本地存储）。
+     */
+    private static function shouldHandleFile(array $file, string $ext): bool
+    {
+        try {
+            $picupOpts = \Typecho\Widget::widget('Widget_Options')->plugin('PicUp');
+            $mimeScope = isset($picupOpts->mimeScope) ? (string)$picupOpts->mimeScope : 'image';
+        } catch (\Exception $e) {
+            $mimeScope = 'image';
+        }
+
+        if ($mimeScope !== 'image') {
+            return true; // 接管所有文件
+        }
+
+        // 只接管图片：优先通过 MIME 探测，回退到扩展名
+        $tmpPath = $file['tmp_name'] ?? '';
+        if ($tmpPath && file_exists($tmpPath)) {
+            $detectedMime = '';
+            if (function_exists('mime_content_type')) {
+                $detectedMime = (string)mime_content_type($tmpPath);
+            } elseif (function_exists('finfo_open')) {
+                $fi = finfo_open(FILEINFO_MIME_TYPE);
+                $detectedMime = (string)finfo_file($fi, $tmpPath);
+                finfo_close($fi);
+            }
+            if ($detectedMime !== '') {
+                return strpos($detectedMime, 'image/') === 0;
+            }
+        }
+
+        // 无法探测 MIME 时通过扩展名判断
+        static $imgExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tiff', 'tif', 'avif', 'svg', 'ico'];
+        return in_array(strtolower($ext), $imgExts, true);
+    }
+
     public static function uploadHandle(array $file)
     {
         if (empty($file['name'])) {
@@ -500,6 +551,11 @@ HTML;
         }
         if (!\Widget\Upload::checkFileType($ext)) {
             error_log('[PicUp] uploadHandle: 文件类型不在允许列表中，ext=' . $ext);
+            return false;
+        }
+
+        // 文件接管范围检查：'image' 模式下仅处理图片，其余交由 Typecho 默认处理器
+        if (!self::shouldHandleFile($file, $ext)) {
             return false;
         }
 
@@ -563,6 +619,11 @@ HTML;
 
         $ext = self::getSafeName($file['name']);
         if (isset($content['attachment']) && $content['attachment']->type != $ext) {
+            return false;
+        }
+
+        // 文件接管范围检查
+        if (!self::shouldHandleFile($file, $ext)) {
             return false;
         }
 
