@@ -5,7 +5,7 @@
  *
  * @package PicUp
  * @author LHL
- * @version 1.1.2
+ * @version 1.2.0
  * @link https://github.com/lhl77/Typecho-Plugin-PicUp
  */
 
@@ -178,24 +178,76 @@ class Plugin implements PluginInterface
     }
 
     /**
-     * 创建备份表 {prefix}_PicUpBackup（若不存在则建表）
+     * 检测当前数据库类型。
+     * 返回 'sqlite' | 'pgsql' | 'mysql'（MariaDB / MySQL / Mysqli 均视为 mysql）
+     */
+    private static function getDbType(): string
+    {
+        try {
+            $name = strtolower(Db::get()->getAdapterName());
+            if (strpos($name, 'sqlite') !== false) {
+                return 'sqlite';
+            }
+            if (strpos($name, 'pgsql') !== false || strpos($name, 'postgres') !== false) {
+                return 'pgsql';
+            }
+        } catch (\Exception $e) {
+            // ignore
+        }
+        return 'mysql'; // MySQL / MariaDB / Mysqli
+    }
+
+    /**
+     * 创建备份表 {prefix}_PicUpBackup（若不存在则建表）。
+     * 自动检测数据库类型（MySQL/MariaDB、SQLite、PostgreSQL），使用对应 DDL。
      */
     private static function createBackupTable(): void
     {
         try {
-            $db    = Db::get();
-            $table = $db->getPrefix() . 'PicUpBackup';
-            $db->query(
-                "CREATE TABLE IF NOT EXISTS `{$table}` ("
-                . "`id`              INT          NOT NULL AUTO_INCREMENT, "
-                . "`label`           VARCHAR(255) NOT NULL DEFAULT '', "
-                . "`config_json`     MEDIUMTEXT   NOT NULL, "
-                . "`default_profile` VARCHAR(128) NOT NULL DEFAULT 'default', "
-                . "`backup_date`     DATETIME     NOT NULL, "
-                . "PRIMARY KEY (`id`)"
-                . ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;",
-                Db::WRITE
-            );
+            $db     = Db::get();
+            $table  = $db->getPrefix() . 'PicUpBackup';
+            $dbType = self::getDbType();
+
+            switch ($dbType) {
+                case 'sqlite':
+                    $db->query(
+                        "CREATE TABLE IF NOT EXISTS \"{$table}\" ("
+                        . '"id" INTEGER PRIMARY KEY AUTOINCREMENT, '
+                        . '"label" TEXT NOT NULL DEFAULT \'\', '
+                        . '"config_json" TEXT NOT NULL DEFAULT \'{}\', '
+                        . '"default_profile" TEXT NOT NULL DEFAULT \'default\', '
+                        . '"backup_date" TEXT NOT NULL'
+                        . ');',
+                        Db::WRITE
+                    );
+                    break;
+
+                case 'pgsql':
+                    $db->query(
+                        "CREATE TABLE IF NOT EXISTS \"{$table}\" ("
+                        . '"id" SERIAL PRIMARY KEY, '
+                        . '"label" VARCHAR(255) NOT NULL DEFAULT \'\', '
+                        . '"config_json" TEXT NOT NULL DEFAULT \'{}\', '
+                        . '"default_profile" VARCHAR(128) NOT NULL DEFAULT \'default\', '
+                        . '"backup_date" TIMESTAMP NOT NULL DEFAULT NOW()'
+                        . ');',
+                        Db::WRITE
+                    );
+                    break;
+
+                default: // mysql / mariadb
+                    $db->query(
+                        "CREATE TABLE IF NOT EXISTS `{$table}` ("
+                        . '`id`              INT          NOT NULL AUTO_INCREMENT, '
+                        . '`label`           VARCHAR(255) NOT NULL DEFAULT \'\', '
+                        . '`config_json`     MEDIUMTEXT   NOT NULL, '
+                        . '`default_profile` VARCHAR(128) NOT NULL DEFAULT \'default\', '
+                        . '`backup_date`     DATETIME     NOT NULL, '
+                        . 'PRIMARY KEY (`id`)'
+                        . ') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;',
+                        Db::WRITE
+                    );
+            }
         } catch (\Exception $e) {
             error_log('[PicUp] 创建备份表失败：' . $e->getMessage());
         }
@@ -206,13 +258,82 @@ class Plugin implements PluginInterface
     /* ------------------------------------------------------------------ */
 
     /**
-     * 向后台 <head> 注入 CSS + JS，拦截 fetch 上传请求并弹出 Toast 提示。
+     * 向后台 <head> 注入 CSS + JS：
+     * ① 上传 Toast 提示；
+     * ② 在上传面板（#upload-panel / AdminBeautify 弹框）中注入 PicUp 方案状态栏，支持切换方案与强制上传。
      *
      * @param string $header
      * @return string
      */
     public static function adminHeader(string $header): string
     {
+        // ── 读取当前插件配置，输出到前端 JS ──────────────────────────────
+        $picupCfgJson = '{}';
+        try {
+            $pluginOpts   = Options::alloc()->plugin('PicUp');
+            $configJson   = $pluginOpts->configJson ?? '{}';
+            $allProfiles  = json_decode($configJson, true);
+            $profileKeys  = is_array($allProfiles) ? array_keys($allProfiles) : [];
+            $curProfile   = trim((string)($pluginOpts->defaultProfile ?? 'default')) ?: 'default';
+            $mimeScope    = (string)($pluginOpts->mimeScope ?? 'image') ?: 'image';
+            $picupCfgJson = json_encode([
+                'profiles'       => $profileKeys,
+                'defaultProfile' => $curProfile,
+                'mimeScope'      => $mimeScope,
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        } catch (\Exception $e) {
+            // 插件未启用时忽略
+        }
+
+        $header .= '<script>window.__PICUP_CFG__=' . $picupCfgJson . ';</script>';
+
+        /* ── PicUp 异步对话框助手（兼容 AdminBeautify Dialog 劫持）── */
+        $header .= <<<'END_DIALOG_HELPER'
+<script>
+(function(){
+    /**
+     * picupDialog(type, message [, defaultVal])
+     *   type: 'alert' | 'confirm' | 'prompt'
+     *   返回 Promise:
+     *     alert   → resolve(undefined)
+     *     confirm → resolve(true/false)
+     *     prompt  → resolve(string/null)
+     *
+     * 优先使用 AdminBeautify.alert / .confirm / .prompt 公开 API（v2.1.32+）；
+     * 降级到 _abPendingConfirm / _abPendingPrompt 全局回调（旧版 AB）；
+     * 无 AB 时使用浏览器原生同步对话框。
+     */
+    window.picupDialog = function(type, msg, defVal){
+        var AB = window.AdminBeautify;
+        /* ① AB 公开 Promise API（推荐） */
+        if(AB && typeof AB[type] === 'function'){
+            return AB[type](msg, defVal);
+        }
+        return new Promise(function(resolve){
+            if(!AB){
+                /* ② 无 AB：原生同步 */
+                if(type==='confirm') resolve(confirm(msg));
+                else if(type==='prompt') resolve(prompt(msg,defVal));
+                else { alert(msg); resolve(); }
+                return;
+            }
+            /* ③ 旧版 AB：全局回调 */
+            if(type==='confirm'){
+                window._abPendingConfirm = function(r){ resolve(!!r); };
+                window.confirm(msg);
+            } else if(type==='prompt'){
+                window._abPendingPrompt = function(r){ resolve(r); };
+                window.prompt(msg, defVal||'');
+            } else {
+                window.alert(msg);
+                resolve();
+            }
+        });
+    };
+})();
+</script>
+END_DIALOG_HELPER;
+
         $header .= <<<'END_SCRIPT'
 <style>
 #picup-toast{position:fixed;top:56px;right:20px;z-index:99999;padding:9px 16px 9px 12px;
@@ -221,6 +342,34 @@ display:none;max-width:300px;line-height:1.4;pointer-events:none;transition:opac
 #picup-toast.pu-uploading{background:#3b82f6;}
 #picup-toast.pu-success{background:#22c55e;}
 #picup-toast.pu-error{background:#ef4444;}
+/* ── PicUp 上传方案状态栏 ── */
+#picup-upload-bar{
+    display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;
+    padding:8px 12px;margin-bottom:8px;
+    background:var(--md-surface-container,#f5f5f5);
+    border:1px solid var(--md-outline-variant,#e0e0e0);
+    border-radius:6px;font-size:12px;
+}
+.pu-bar-section{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+.pu-logo{font-size:11px;font-weight:700;background:var(--md-primary,#467b96);color:#fff;
+  padding:1px 7px;border-radius:9999px;white-space:nowrap;}
+.pu-scope-badge{display:inline-block;padding:1px 7px;border-radius:9999px;font-size:11px;
+  font-weight:600;white-space:nowrap;}
+.pu-scope-image{background:#dbeafe;color:#1d4ed8;}
+.pu-scope-all{background:#d1fae5;color:#065f46;}
+.pu-bar-label{font-size:12px;color:var(--md-on-surface-variant,#666);white-space:nowrap;}
+#pu-profile-sel{
+    padding:3px 8px;border:1px solid var(--md-outline-variant,#e0e0e0);
+    border-radius:4px;background:var(--md-surface,#fff);
+    color:var(--md-on-surface,#333);font-size:12px;cursor:pointer;
+}
+.pu-force-wrap{display:flex;align-items:center;gap:5px;cursor:pointer;
+  color:var(--md-on-surface-variant,#666);}
+.pu-force-wrap input{cursor:pointer;accent-color:var(--md-primary,#467b96);width:14px;height:14px;}
+[data-theme="dark"] #picup-upload-bar{background:var(--md-dark-surface-container,#2b2930);border-color:var(--md-dark-outline-variant,#49454f);}
+[data-theme="dark"] #pu-profile-sel{background:var(--md-dark-surface,#1c1b1f);border-color:var(--md-dark-outline-variant,#49454f);color:var(--md-dark-on-surface,#e6e1e5);}
+[data-theme="dark"] .pu-bar-label{color:var(--md-dark-on-surface-variant,#cac4d0);}
+[data-theme="dark"] .pu-force-wrap{color:var(--md-dark-on-surface-variant,#cac4d0);}
 </style>
 <script>
 (function(){
@@ -234,10 +383,153 @@ display:none;max-width:300px;line-height:1.4;pointer-events:none;transition:opac
         t.textContent=msg;t.className=cls;t.style.display='block';t.style.opacity='1';
         if(dur){_timer=setTimeout(function(){t.style.opacity='0';setTimeout(function(){t.style.display='none';},300);},dur);}
     }
+
+    /* ── PicUp 上传方案状态栏注入 ── */
+    function buildUploadBar(){
+        var cfg=window.__PICUP_CFG__||{};
+        var profiles=cfg.profiles||[];
+        var cur=cfg.defaultProfile||'default';
+        var scope=cfg.mimeScope||'image';
+        var div=document.createElement('div');div.id='picup-upload-bar';
+
+        /* logo + scope badge */
+        var sec1=document.createElement('div');sec1.className='pu-bar-section';
+        var logo=document.createElement('span');logo.className='pu-logo';logo.textContent='PicUp';sec1.appendChild(logo);
+        var badge=document.createElement('span');
+        if(scope==='image'){badge.className='pu-scope-badge pu-scope-image';badge.textContent='仅图片';}
+        else{badge.className='pu-scope-badge pu-scope-all';badge.textContent='所有文件';}
+        badge.title='文件接管范围：'+(scope==='image'?'只接管图片，其他文件本地存储':'接管所有文件');
+        sec1.appendChild(badge);
+        div.appendChild(sec1);
+
+        /* 方案切换 */
+        var sec2=document.createElement('div');sec2.className='pu-bar-section';
+        var lbl=document.createElement('span');lbl.className='pu-bar-label';lbl.textContent='上传方案：';sec2.appendChild(lbl);
+        var sel=document.createElement('select');sel.id='pu-profile-sel';
+        profiles.forEach(function(k){
+            var o=document.createElement('option');o.value=k;o.textContent=k;
+            if(k===cur)o.selected=true;sel.appendChild(o);
+        });
+        if(!profiles.length){
+            var o=document.createElement('option');o.value=cur;o.textContent=cur+' ✓';sel.appendChild(o);
+        }
+        sec2.appendChild(sel);div.appendChild(sec2);
+
+        /* 强制上传复选框 */
+        var sec3=document.createElement('div');sec3.className='pu-bar-section';
+        var fl=document.createElement('label');fl.className='pu-force-wrap';
+        var cb=document.createElement('input');cb.type='checkbox';cb.id='pu-force-cb';
+        fl.appendChild(cb);
+        var ft=document.createElement('span');ft.textContent='忽略范围限制，强制使用以上方案上传';fl.appendChild(ft);
+        sec3.appendChild(fl);div.appendChild(sec3);
+        return div;
+    }
+
+    function injectBar(panel){
+        if(panel.querySelector('#picup-upload-bar')) return;
+        var cfg=window.__PICUP_CFG__;
+        if(!cfg||!cfg.profiles) return;
+        var bar=buildUploadBar();
+        panel.insertBefore(bar,panel.firstChild);
+    }
+    /* 注入 AdminBeautify manage-medias 上传对话框 */
+    function injectAbDialog(dialog){
+        var body=dialog.querySelector('.ab-upload-dialog-body');
+        if(!body) return;
+        if(body.querySelector('#picup-upload-bar')) return;
+        var cfg=window.__PICUP_CFG__;
+        if(!cfg||!cfg.profiles) return;
+        var dz=body.querySelector('#ab-upload-dropzone');
+        var bar=buildUploadBar();
+        body.insertBefore(bar,dz||body.firstChild);
+    }
+    /* 注入 AdminBeautify write-post 附件选择器上传标签页 */
+    function injectAbAttachPicker(){
+        var pane=document.getElementById('ab-ap-pane-upload');
+        if(!pane) return;
+        if(pane.querySelector('#picup-upload-bar')) return;
+        var cfg=window.__PICUP_CFG__;
+        if(!cfg||!cfg.profiles) return;
+        var dz=pane.querySelector('#ab-ap-dropzone');
+        var bar=buildUploadBar();
+        pane.insertBefore(bar,dz||pane.firstChild);
+    }
+
+    function scanAndInject(){
+        var panel=document.getElementById('upload-panel');
+        if(panel) injectBar(panel);
+        var dlg=document.getElementById('ab-upload-dialog');
+        if(dlg) injectAbDialog(dlg);
+        injectAbAttachPicker();
+    }
+
+    /* MutationObserver 监听上传面板出现（弹出面板场景） */
+    if(window.MutationObserver){
+        var obs=new MutationObserver(function(muts){
+            for(var i=0;i<muts.length;i++){
+                var nodes=muts[i].addedNodes;
+                for(var j=0;j<nodes.length;j++){
+                    var n=nodes[j];
+                    if(n.nodeType!==1) continue;
+                    if(n.id==='upload-panel'){injectBar(n);continue;}
+                    if(n.id==='ab-upload-dialog'){injectAbDialog(n);continue;}
+                    if(n.id==='ab-ap-pane-upload'||n.id==='ab-attach-picker-overlay'){
+                        setTimeout(injectAbAttachPicker,50);continue;
+                    }
+                    var inner=n.querySelector&&n.querySelector('#upload-panel');
+                    if(inner){injectBar(inner);continue;}
+                    var abDlg=n.querySelector&&n.querySelector('#ab-upload-dialog');
+                    if(abDlg){injectAbDialog(abDlg);continue;}
+                    var abPicker=n.querySelector&&n.querySelector('#ab-ap-pane-upload');
+                    if(abPicker){setTimeout(injectAbAttachPicker,50);}
+                }
+            }
+        });
+        obs.observe(document.body||document.documentElement,{childList:true,subtree:true});
+    }
+
+    /* ── XHR 拦截：为 AdminBeautify 的 XHR 上传注入方案头 ── */
+    (function(){
+        var _open=XMLHttpRequest.prototype.open;
+        XMLHttpRequest.prototype.open=function(method,url){
+            this.__pu_url=(url||'').toString();
+            return _open.apply(this,arguments);
+        };
+        var _send=XMLHttpRequest.prototype.send;
+        XMLHttpRequest.prototype.send=function(body){
+            if(this.__pu_url&&this.__pu_url.indexOf('do=upload-media')!==-1){
+                var sel=document.getElementById('pu-profile-sel');
+                var cb=document.getElementById('pu-force-cb');
+                if(sel&&sel.value){
+                    try{this.setRequestHeader('X-PicUp-Profile',sel.value);}catch(e){}
+                }
+                if(cb&&cb.checked){
+                    try{this.setRequestHeader('X-PicUp-Force','1');}catch(e){}
+                }
+            }
+            return _send.apply(this,arguments);
+        };
+    })();
+
+    /* ── fetch 拦截：Toast + 注入方案覆盖参数 ── */
     var _origFetch=window.fetch;
     window.fetch=function(resource,init){
         var urlStr=typeof resource==='string'?resource:(resource&&resource.url?resource.url:'');
         if(urlStr.indexOf('/action/upload')!==-1){
+            /* 注入 PicUp 方案覆盖参数 */
+            if(init&&init.body instanceof FormData){
+                var cfg=window.__PICUP_CFG__||{};
+                var sel=document.getElementById('pu-profile-sel');
+                var forceCb=document.getElementById('pu-force-cb');
+                var selProfile=sel?sel.value:'';
+                /* 仅当选择了非默认方案时注入（减少不必要的参数） */
+                if(selProfile&&selProfile!==(cfg.defaultProfile||'')){
+                    init.body.append('_picup_profile',selProfile);
+                }
+                if(forceCb&&forceCb.checked){
+                    init.body.append('_picup_force','1');
+                }
+            }
             _count++;showToast('\u2b06 \u6b63\u5728\u4e0a\u4f20\u2026 ('+_count+'\u4e2a)','pu-uploading');
             var p=_origFetch.apply(this,arguments);
             p.then(function(resp){
@@ -257,6 +549,14 @@ display:none;max-width:300px;line-height:1.4;pointer-events:none;transition:opac
         }
         return _origFetch.apply(this,arguments);
     };
+
+    /* 常规初始化（页面加载 & AdminBeautify AJAX 导航） */
+    function init(){
+        scanAndInject();
+    }
+    if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',init);}
+    else{init();}
+    document.addEventListener('ab:pageload',init);
 })();
 </script>
 END_SCRIPT;
@@ -278,15 +578,29 @@ END_SCRIPT;
         // 0. 顶部插件信息 & AdminBeautify 推荐
         $form->addInput(new HtmlElement(<<<'HTML'
 <style>
-.picup-info-bar{display:flex;flex-wrap:wrap;gap:10px;align-items:stretch;margin:0 0 20px;}
-.picup-info-card{flex:1;min-width:220px;padding:14px 16px;border-radius:8px;border:1px solid #e5e7eb;background:#f9fafb;line-height:1.6;}
-.picup-info-card h4{margin:0 0 6px;font-size:14px;font-weight:600;color:#374151;}
-.picup-info-card p{margin:0;font-size:12px;color:#6b7280;}
-.picup-info-card a{color:#3b82f6;text-decoration:none;}
-.picup-info-card a:hover{text-decoration:underline;}
-.picup-ab-card{border-color:#f59e0b;background:#fffbeb;}
-.picup-ab-card h4{color:#92400e;}
-.picup-ab-card .ab-badge{display:inline-block;padding:1px 7px;border-radius:9999px;background:#f59e0b;color:#fff;font-size:11px;font-weight:600;margin-left:6px;vertical-align:middle;}
+.picup-info-bar{display:flex!important;flex-wrap:wrap!important;gap:10px!important;align-items:stretch!important;margin:0 0 20px!important;}
+.picup-info-card{
+    flex:1!important;min-width:220px!important;padding:14px 16px!important;border-radius:10px!important;line-height:1.6!important;
+    border:1px solid var(--md-outline-variant,#cac4d0)!important;
+    background:var(--md-surface-container-low,#f7f2fa)!important;
+    box-sizing:border-box!important;
+}
+.picup-info-card h4{margin:0 0 6px!important;font-size:14px!important;font-weight:600!important;color:var(--md-on-surface,#1c1b1f)!important;}
+.picup-info-card p{margin:0!important;font-size:12px!important;color:var(--md-on-surface-variant,#49454f)!important;}
+.picup-info-card a{color:var(--md-primary,#6750a4)!important;text-decoration:none!important;}
+.picup-info-card a:hover{text-decoration:underline!important;}
+.picup-ab-card{border-color:#f59e0b!important;background:#fffbeb!important;}
+.picup-ab-card h4{color:#92400e!important;}
+.picup-ab-card p{color:#78350f!important;}
+.picup-ab-card a{color:#b45309!important;}
+.picup-ab-card .ab-badge{display:inline-block!important;padding:1px 7px!important;border-radius:9999px!important;background:#f59e0b!important;color:#fff!important;font-size:11px!important;font-weight:600!important;margin-left:6px!important;vertical-align:middle!important;}
+[data-theme="dark"] .picup-info-card{border-color:var(--md-dark-outline-variant,#49454f)!important;background:var(--md-dark-surface-container,#2b2930)!important;}
+[data-theme="dark"] .picup-info-card h4{color:var(--md-dark-on-surface,#e6e1e5)!important;}
+[data-theme="dark"] .picup-info-card p{color:var(--md-dark-on-surface-variant,#cac4d0)!important;}
+[data-theme="dark"] .picup-info-card a{color:var(--md-dark-primary,#d0bcff)!important;}
+[data-theme="dark"] .picup-ab-card{border-color:#92400e!important;background:#2c1a00!important;}
+[data-theme="dark"] .picup-ab-card h4{color:#fbbf24!important;}
+[data-theme="dark"] .picup-ab-card p,[data-theme="dark"] .picup-ab-card a{color:#fcd34d!important;}
 </style>
 <div class="picup-info-bar">
   <div class="picup-info-card">
@@ -296,7 +610,7 @@ END_SCRIPT;
       <a href="https://github.com/lhl77/Typecho-Plugin-PicUp" target="_blank">GitHub</a>　|　
       <a href="https://blog.lhl.one/artical/1026.html" target="_blank">使用文档</a>
     </p>
-    <p>版本：v1.1.2</p>
+    <p>版本：v1.2.0</p>
   </div>
   <div class="picup-info-card picup-ab-card">
     <h4>✨ 推荐安装 Admin Beautify<span class="ab-badge">AB-Store</span></h4>
@@ -361,7 +675,7 @@ HTML));
         );
         $configJson->input->setAttribute(
             'style',
-            'width:100%;max-width:800px;height:300px;font-family:monospace;font-size:13px;'
+            'width:100%;max-width:800px;height:300px;font-family:monospace;font-size:13px;display:block;margin:0 auto;'
         );
         $form->addInput($configJson);
 
@@ -455,18 +769,31 @@ HTML;
     private static function buildDbWarningHtml(): string
     {
         try {
-            $db    = Db::get();
-            $table = $db->getPrefix() . 'PicUpBackup';
+            $db     = Db::get();
+            $table  = $db->getPrefix() . 'PicUpBackup';
+            $dbType = self::getDbType();
 
-            // 用 SHOW TABLES LIKE 判断表是否存在（兼容 MySQL / MariaDB）
-            $row = $db->fetchRow(
-                $db->query("SHOW TABLES LIKE '{$table}'", Db::READ)
-            );
+            switch ($dbType) {
+                case 'sqlite':
+                    $row = $db->fetchRow(
+                        $db->query("SELECT name FROM sqlite_master WHERE type='table' AND name='{$table}'", Db::READ)
+                    );
+                    break;
+                case 'pgsql':
+                    $row = $db->fetchRow(
+                        $db->query("SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename='{$table}'", Db::READ)
+                    );
+                    break;
+                default: // mysql / mariadb
+                    $row = $db->fetchRow(
+                        $db->query("SHOW TABLES LIKE '{$table}'", Db::READ)
+                    );
+            }
             if ($row) {
                 return '';
             }
         } catch (\Exception $e) {
-            // 查询报错（其他 DB 错误）→ 显示警告
+            // 查询报错 → 显示警告
         }
 
         return <<<'HTML'
@@ -557,13 +884,27 @@ HTML;
         }
 
         // 文件接管范围检查：'image' 模式下仅处理图片，其余执行本地存储
+        // 允许通过 POST 参数 _picup_force=1 或 HTTP 头 X-PicUp-Force 强制走 PicUp
+        $overrideProfile = isset($_POST['_picup_profile']) ? trim((string)$_POST['_picup_profile']) : '';
+        if ($overrideProfile === '' && !empty($_SERVER['HTTP_X_PICUP_PROFILE'])) {
+            $overrideProfile = trim((string)$_SERVER['HTTP_X_PICUP_PROFILE']);
+        }
+        $forceUpload = !empty($_POST['_picup_force']) || !empty($_SERVER['HTTP_X_PICUP_FORCE']);
+
         // 注意：不能直接 return false —— Typecho Plugin::call() 会将 signal 无条件置为 true，
         // 导致默认本地存储逻辑被跳过，上传彻底失败。必须自行完成本地存储并返回结果数组。
-        if (!self::shouldHandleFile($file, $ext)) {
+        if (!$forceUpload && !self::shouldHandleFile($file, $ext)) {
             return self::_localUpload($file, $ext);
         }
 
-        $driver = self::getDriver();
+        // 优先使用上传窗口覆盖的方案，否则使用全局默认方案
+        if ($overrideProfile !== '') {
+            $driver      = self::getDriverForProfile($overrideProfile);
+            $activeConfig = self::getActiveConfigForProfile($overrideProfile) ?? [];
+        } else {
+            $driver      = self::getDriver();
+            $activeConfig = self::getActiveConfig() ?? [];
+        }
         if (!$driver) {
             error_log('[PicUp] uploadHandle: 无法初始化存储驱动，请检查插件配置（插件设置→当前使用的配置方案 与 JSON 中的 key 是否一致）');
             return false;
@@ -576,7 +917,6 @@ HTML;
         }
 
         // 应用扩展处理（压缩 / 水印 / WebP 转换等）
-        $activeConfig = self::getActiveConfig() ?? [];
         [$processedFile, $processedMime, $extTmpFiles] = self::applyExtensions($localFile, $mimeType, $activeConfig);
 
         // 若 MIME 发生变化（如转为 WebP），同步更新文件扩展名
@@ -628,11 +968,23 @@ HTML;
 
         // 文件接管范围检查：'image' 模式下仅处理图片，其余执行本地存储
         // 同 uploadHandle，不能 return false，须自行完成本地存储。
-        if (!self::shouldHandleFile($file, $ext)) {
+        $overrideProfile = isset($_POST['_picup_profile']) ? trim((string)$_POST['_picup_profile']) : '';
+        if ($overrideProfile === '' && !empty($_SERVER['HTTP_X_PICUP_PROFILE'])) {
+            $overrideProfile = trim((string)$_SERVER['HTTP_X_PICUP_PROFILE']);
+        }
+        $forceUpload = !empty($_POST['_picup_force']) || !empty($_SERVER['HTTP_X_PICUP_FORCE']);
+
+        if (!$forceUpload && !self::shouldHandleFile($file, $ext)) {
             return self::_localUpload($file, $ext);
         }
 
-        $driver = self::getDriver();
+        if ($overrideProfile !== '') {
+            $driver       = self::getDriverForProfile($overrideProfile);
+            $activeConfig = self::getActiveConfigForProfile($overrideProfile) ?? [];
+        } else {
+            $driver       = self::getDriver();
+            $activeConfig = self::getActiveConfig() ?? [];
+        }
         if (!$driver) {
             return false;
         }
@@ -648,7 +1000,6 @@ HTML;
         }
 
         // 应用扩展处理（压缩 / 水印 / WebP 转换等）
-        $activeConfig = self::getActiveConfig() ?? [];
         [$processedFile, $processedMime, $extTmpFiles] = self::applyExtensions($localFile, $mimeType, $activeConfig);
 
         // 若 MIME 发生变化，更新扩展名
@@ -753,9 +1104,45 @@ HTML;
     /*  Internal Helpers                                                   */
     /* ------------------------------------------------------------------ */
 
-    private static function getDriver()
+    /**
+     * 按指定方案 key 读取配置（不使用静态缓存，每次实时读取）。
+     */
+    private static function getActiveConfigForProfile(string $profileKey): ?array
     {
-        static $driver = null, $loaded = false;
+        try {
+            $pluginConfig = Options::alloc()->plugin('PicUp');
+        } catch (\Exception $e) {
+            return null;
+        }
+        $all = json_decode($pluginConfig->configJson ?? '{}', true);
+        if (!is_array($all) || !isset($all[$profileKey])) {
+            return null;
+        }
+        return $all[$profileKey];
+    }
+
+    /**
+     * 按指定方案 key 实例化驱动。
+     */
+    private static function getDriverForProfile(string $profileKey)
+    {
+        $config = self::getActiveConfigForProfile($profileKey);
+        if (!$config) {
+            return null;
+        }
+        $driverKey = $config['driver'] ?? '';
+        if (empty($driverKey)) {
+            return null;
+        }
+        $drivers = self::getDrivers();
+        if (!isset($drivers[$driverKey])) {
+            return null;
+        }
+        return new $drivers[$driverKey]($config);
+    }
+
+    private static function getDriver()
+    {        static $driver = null, $loaded = false;
         if ($loaded) {
             return $driver;
         }
@@ -1018,48 +1405,75 @@ HTML;
 <label class="typecho-label">配置备份 (先保存设置后备份)</label>
 <div id="picup-backup-wrap" data-url="{$ajaxUrlEsc}" data-token="{$tokenEsc}">
 <style>
-#picup-backup-wrap{max-width:800px;}
-.pb-toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;}
-.pb-btn{padding:6px 14px;min-height:32px;border:none;border-radius:5px;font-size:12px;
-  cursor:pointer;white-space:nowrap;transition:opacity .15s;display:inline-flex;align-items:center;gap:4px;}
-.pb-btn:hover{opacity:.85;}
-.pb-btn:active{transform:scale(.97);}
-.pb-btn-primary{background:#6750a4;color:#fff;}
-.pb-btn-restore{background:#2563eb;color:#fff;}
-.pb-btn-del{background:#b3261e;color:#fff;}
-.pb-btn:disabled{opacity:.45;cursor:not-allowed;}
-.pb-label-wrap{display:flex;align-items:center;gap:6px;}
-.pb-label-inp{border:1px solid #c5cad3;border-radius:5px;padding:5px 9px;
-  font-size:12px;min-width:180px;color:#1a1a1a;background:#fff;}
-.pb-list{border:1px solid #e4e7eb;border-radius:6px;overflow:hidden;margin-top:4px;}
-.pb-list-head{display:grid;grid-template-columns:1fr 110px 90px 86px;gap:0;
-  background:#f0f2f5;font-size:12px;font-weight:600;color:#6b7280;padding:7px 10px;}
-.pb-list-row{display:grid;grid-template-columns:1fr 110px 90px 86px;gap:0;
-  font-size:12px;padding:7px 10px;border-top:1px solid #f0f2f5;align-items:center;color:#374151;}
-.pb-list-row:hover{background:#fafafa;}
-.pb-row-label{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:6px;}
-.pb-row-date{color:#6b7280;font-size:11px;}
-.pb-row-profile{color:#6750a4;font-size:11px;font-weight:600;}
-.pb-row-actions{display:flex;gap:4px;}
-.pb-empty{padding:20px;text-align:center;color:#9ca3af;font-size:13px;}
-.pb-status{margin:8px 0 0;font-size:12px;min-height:18px;color:#6750a4;}
-[data-theme="dark"] .pb-list{border-color:#3a3740;}
-[data-theme="dark"] .pb-list-head{background:#2b2930;color:#938f99;}
-[data-theme="dark"] .pb-list-row{border-top-color:#3a3740;color:#cac4d0;}
-[data-theme="dark"] .pb-list-row:hover{background:#1c1b1f;}
-[data-theme="dark"] .pb-label-inp{border-color:#49454f;background:#2b2930;color:#e6e1e5;}
+#picup-backup-wrap{padding:16px;max-width:800px!important;margin:0 auto!important;}
+.pb-toolbar{display:flex!important;gap:8px!important;flex-wrap:wrap!important;align-items:center!important;margin-bottom:12px!important;}
+.pb-btn{
+    padding:6px 14px!important;min-height:32px!important;border:none!important;border-radius:20px!important;font-size:12px!important;
+    cursor:pointer!important;white-space:nowrap!important;font-weight:500!important;letter-spacing:.02em!important;
+    transition:opacity .15s,box-shadow .15s!important;
+    display:inline-flex!important;align-items:center!important;gap:4px!important;
+    box-sizing:border-box!important;
+}
+#typecho-option-item-configJson-3 li{padding:16px;}
+.pb-btn:hover{opacity:.88!important;box-shadow:0 1px 4px rgba(0,0,0,.15)!important;}
+.pb-btn:active{transform:scale(.97)!important;}
+.pb-btn-primary{background:var(--md-primary,#6750a4)!important;color:var(--md-on-primary,#fff)!important;}
+.pb-btn-restore{background:var(--md-primary-container,#eaddff)!important;color:var(--md-on-surface,#1c1b1f)!important;}
+.pb-btn-del{background:var(--md-error,#b3261e)!important;color:#fff!important;}
+.pb-btn:disabled{opacity:.4!important;cursor:not-allowed!important;box-shadow:none!important;}
+.pb-label-wrap{display:flex!important;align-items:center!important;gap:6px!important;}
+.pb-label-inp{
+    border:1px solid var(--md-outline,#79747e)!important;
+    border-radius:6px!important;padding:5px 9px!important;font-size:12px!important;min-width:180px!important;
+    color:var(--md-on-surface,#1c1b1f)!important;
+    background:var(--md-surface,#fffbfe)!important;
+    transition:border-color .15s!important;outline:none!important;
+    box-sizing:border-box!important;
+}
+.pb-label-inp:focus{border-color:var(--md-primary,#6750a4)!important;box-shadow:0 0 0 3px rgba(103,80,164,.15)!important;}
+.pb-list{border:1px solid var(--md-outline-variant,#cac4d0)!important;border-radius:8px!important;overflow:hidden!important;margin-top:4px!important;}
+.pb-list-head{
+    display:grid!important;grid-template-columns:1fr 110px 90px 86px!important;gap:0!important;
+    background:var(--md-surface-container,#f3edf7)!important;
+    font-size:12px!important;font-weight:600!important;
+    color:var(--md-on-surface-variant,#49454f)!important;
+    padding:7px 10px!important;
+}
+.pb-list-row{
+    display:grid!important;grid-template-columns:1fr 110px 90px 86px!important;gap:0!important;
+    font-size:12px!important;padding:7px 10px!important;
+    border-top:1px solid var(--md-outline-variant,#cac4d0)!important;
+    align-items:center!important;color:var(--md-on-surface,#1c1b1f)!important;
+    transition:background .1s!important;
+}
+.pb-list-row:hover{background:var(--md-surface-container-low,#f7f2fa)!important;}
+.pb-row-label{font-weight:500!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;padding-right:6px!important;}
+.pb-row-date{color:var(--md-on-surface-variant,#49454f)!important;font-size:11px!important;}
+.pb-row-profile{color:var(--md-primary,#6750a4)!important;font-size:11px!important;font-weight:600!important;}
+.pb-row-actions{display:flex!important;gap:4px!important;}
+.pb-empty{padding:20px!important;text-align:center!important;color:var(--md-on-surface-variant,#49454f)!important;font-size:13px!important;}
+.pb-status{margin:8px 0 0!important;font-size:12px!important;min-height:18px!important;color:var(--md-primary,#6750a4)!important;}
+[data-theme="dark"] .pb-list{border-color:var(--md-dark-outline-variant,#49454f)!important;}
+[data-theme="dark"] .pb-list-head{background:var(--md-dark-surface-container,#2b2930)!important;color:var(--md-dark-on-surface-variant,#cac4d0)!important;}
+[data-theme="dark"] .pb-list-row{border-top-color:var(--md-dark-outline-variant,#49454f)!important;color:var(--md-dark-on-surface,#e6e1e5)!important;}
+[data-theme="dark"] .pb-list-row:hover{background:var(--md-dark-surface,#1c1b1f)!important;}
+[data-theme="dark"] .pb-label-inp{border-color:var(--md-dark-outline,#938f99)!important;background:var(--md-dark-surface,#1c1b1f)!important;color:var(--md-dark-on-surface,#e6e1e5)!important;}
+[data-theme="dark"] .pb-row-date{color:var(--md-dark-on-surface-variant,#cac4d0)!important;}
+[data-theme="dark"] .pb-row-profile{color:var(--md-dark-primary,#d0bcff)!important;}
+[data-theme="dark"] .pb-status{color:var(--md-dark-primary,#d0bcff)!important;}
+[data-theme="dark"] .pb-btn-restore{background:#3a2f56!important;color:var(--md-dark-on-surface,#e6e1e5)!important;}
 @media(max-width:600px){
-  .pb-list-head,.pb-list-row{grid-template-columns:1fr 80px 70px;}
-  .pb-head-profile,.pb-row-profile{display:none;}
+  .pb-list-head,.pb-list-row{grid-template-columns:1fr 80px 70px!important;}
+  .pb-head-profile,.pb-row-profile{display:none!important;}
 }
 </style>
 <div class="pb-toolbar">
   <div class="pb-label-wrap">
     <input type="text" id="pb-label-inp" class="pb-label-inp" placeholder="备份名称（留空自动生成）">
   </div><br/>
-  <button type="button" class="pb-btn pb-btn-primary" id="pb-backup-btn">💾 备份当前配置</button>
+  <button type="button" class="pb-btn pb-btn-primary" id="pb-backup-btn">备份当前配置</button>
   <button type="button" class="pb-btn pb-btn-restore" id="pb-restore-btn" disabled>↩ 从数据库中恢复</button>
-  <button type="button" class="pb-btn pb-btn-del" id="pb-del-btn" disabled>🗑 删除备份</button>
+  <button type="button" class="pb-btn pb-btn-del" id="pb-del-btn" disabled>删除备份</button>
 </div>
 <div id="pb-list-wrap">
   <div class="pb-empty">加载中…</div>
@@ -1122,23 +1536,27 @@ HTML;
   });
   btnRestore.addEventListener('click',function(){
     if(!selId) return;
-    if(!confirm('确定要从该备份中恢复配置吗？当前未保存的修改将被覆盖，恢复后请点击页面下方的「保存设置」。')) return;
-    post('restore',{id:selId},function(res){
-      if(res.code===0){
-        setStatus('✅ '+res.message);
-        var ta=document.querySelector('textarea[name="configJson"]');
-        var dp=document.querySelector('input[name="defaultProfile"]');
-        if(ta&&res.data.config_json){ta.value=res.data.config_json;ta.dispatchEvent(new Event('blur'));}
-        if(dp&&res.data.default_profile){dp.value=res.data.default_profile;}
-      } else {setStatus('❌ '+res.message,true);}
+    picupDialog('confirm','确定要从该备份中恢复配置吗？\\n当前未保存的修改将被覆盖，恢复后请点击页面下方的「保存设置」。').then(function(ok){
+      if(!ok) return;
+      post('restore',{id:selId},function(res){
+        if(res.code===0){
+          setStatus('✅ '+res.message);
+          var ta=document.querySelector('textarea[name="configJson"]');
+          var dp=document.querySelector('input[name="defaultProfile"]');
+          if(ta&&res.data.config_json){ta.value=res.data.config_json;ta.dispatchEvent(new Event('blur'));}
+          if(dp&&res.data.default_profile){dp.value=res.data.default_profile;}
+        } else {setStatus('❌ '+res.message,true);}
+      });
     });
   });
   btnDel.addEventListener('click',function(){
     if(!selId) return;
-    if(!confirm('确定删除此条备份？此操作不可撤销。')) return;
-    post('delete',{id:selId},function(res){
-      if(res.code===0){setStatus('✅ 删除成功');selId=0;loadList();}
-      else{setStatus('❌ '+res.message,true);}
+    picupDialog('confirm','确定删除此条备份？\\n此操作不可撤销。').then(function(ok){
+      if(!ok) return;
+      post('delete',{id:selId},function(res){
+        if(res.code===0){setStatus('✅ 删除成功');selId=0;loadList();}
+        else{setStatus('❌ '+res.message,true);}
+      });
     });
   });
   // AdminBeautify AJAX 导航适配：监听 ab:pageload 事件，支持无刷新页面切换
@@ -1412,35 +1830,39 @@ HTML;
 
     /* ── 添加方案 ── */
     addBtn.addEventListener('click',function(){
-        var name=prompt('\u8bf7\u8f93\u5165\u65b0\u65b9\u6848\u540d\u79f0:');
-        if(!name||!name.trim()) return; name=name.trim();
-        var p=getProfiles();
-        if(p[name]){alert('\u65b9\u6848 "'+name+'" \u5df2\u5b58\u5728\u3002');return;}
-        var dk=Object.keys(DRIVERS)[0]||'local';
-        p[name]={driver:dk,_extensions:{}};saveProfiles(p);renderSelect(p,name);renderForm(p[name]);
+        picupDialog('prompt','请输入新方案名称:').then(function(name){
+            if(!name||!name.trim()) return; name=name.trim();
+            var p=getProfiles();
+            if(p[name]){picupDialog('alert','方案 "'+name+'" 已存在。');return;}
+            var dk=Object.keys(DRIVERS)[0]||'local';
+            p[name]={driver:dk,_extensions:{}};saveProfiles(p);renderSelect(p,name);renderForm(p[name]);
+        });
     });
 
     /* ── 重命名方案 ── */
     renameBtn.addEventListener('click',function(){
         var oldName=profileSel.value;
         if(!oldName) return;
-        var newName=prompt('\u65b0\u65b9\u6848\u540d\u79f0:', oldName);
-        if(!newName||!newName.trim()) return; newName=newName.trim();
-        if(newName===oldName) return;
-        var p=getProfiles();
-        if(p[newName]){alert('\u65b9\u6848 "'+newName+'" \u5df2\u5b58\u5728\u3002');return;}
-        var np={};
-        Object.keys(p).forEach(function(k){ np[k===oldName?newName:k]=p[k]; });
-        saveProfiles(np);renderSelect(np,newName);renderForm(np[newName]||null);
+        picupDialog('prompt','新方案名称:', oldName).then(function(newName){
+            if(!newName||!newName.trim()) return; newName=newName.trim();
+            if(newName===oldName) return;
+            var p=getProfiles();
+            if(p[newName]){picupDialog('alert','方案 "'+newName+'" 已存在。');return;}
+            var np={};
+            Object.keys(p).forEach(function(k){ np[k===oldName?newName:k]=p[k]; });
+            saveProfiles(np);renderSelect(np,newName);renderForm(np[newName]||null);
+        });
     });
 
     /* ── 删除方案 ── */
     delBtn.addEventListener('click',function(){
         var name=profileSel.value;if(!name) return;
-        if(!confirm('\u786e\u8ba4\u5220\u9664\u65b9\u6848 "'+name+'"\uff1f\u6b64\u64cd\u4f5c\u4e0d\u53ef\u64a4\u9500\u3002')) return;
-        var p=getProfiles();delete p[name];saveProfiles(p);
-        var first=Object.keys(p)[0]||null;
-        renderSelect(p,first);renderForm(first?p[first]:null);
+        picupDialog('confirm','确认删除方案 "'+name+'"\uff1f\n此操作不可撤销。').then(function(ok){
+            if(!ok) return;
+            var p=getProfiles();delete p[name];saveProfiles(p);
+            var first=Object.keys(p)[0]||null;
+            renderSelect(p,first);renderForm(first?p[first]:null);
+        });
     });
 
     /* ── 应用方案 ── */
@@ -1476,109 +1898,333 @@ EOJS;
 
         $css = <<<'EOCSS'
 <style>
-/* ── PicUp 配置编辑器 ── */
+/* ── PicUp 折叠区块（包裹式卡片：wrap > hdr + body） ── */
+.picup-collapse-wrap{
+    border:1px solid var(--md-outline-variant,#cac4d0)!important;
+    border-radius:var(--md-radius-xl,16px)!important;
+    overflow:hidden!important;
+    margin-top:8px!important;
+    background:var(--md-surface-container-low,#f7f2fa)!important;
+}
+.picup-collapse-hdr{
+    display:flex!important;align-items:center!important;justify-content:space-between!important;
+    padding:12px 20px!important;margin:0!important;
+    background:var(--md-surface-container,#f3edf7)!important;
+    border:none!important;border-bottom:1px solid var(--md-outline-variant,#cac4d0)!important;
+    cursor:pointer!important;user-select:none!important;
+    font-size:14px!important;font-weight:600!important;
+    color:var(--md-on-surface,#1c1b1f)!important;
+    transition:background .15s!important;
+    box-sizing:border-box!important;border-radius:0!important;
+}
+.picup-collapse-hdr:hover{background:var(--md-surface-container-high,#ece6f0)!important;}
+.picup-collapse-hdr .pca{font-size:16px!important;color:var(--md-on-surface-variant,#49454f)!important;transition:transform .25s!important;}
+.picup-collapse-hdr.is-closed .pca{transform:rotate(-90deg)!important;}
+.picup-collapse-hdr.is-closed{border-bottom:none!important;}
+.picup-collapse-body{
+    margin:0!important;border:none!important;border-radius:0!important;
+    box-shadow:none!important;overflow:hidden!important;
+    list-style:none!important;
+    transition:max-height .3s ease,opacity .2s ease!important;
+    opacity:1!important;
+}
+.picup-collapse-body.is-closed{max-height:0!important;opacity:0!important;overflow:hidden!important;}
+/* 隐藏折叠体内的 Typecho 原生 label（标题已由折叠头部展示） */
+.picup-collapse-body > li > .typecho-label{display:none!important;}
+/* 覆盖 AB 包裹：折叠体不需要 ab-options-card 的样式 */
+.picup-collapse-wrap .ab-options-card{
+    border:none!important;border-radius:0!important;margin-top:0!important;
+    box-shadow:none!important;overflow:visible!important;
+}
+/* 暗色模式 */
+[data-theme="dark"] .picup-collapse-wrap{
+    border-color:var(--md-dark-outline-variant,#49454f)!important;
+    background:var(--md-dark-surface-container,#2b2930)!important;
+}
+[data-theme="dark"] .picup-collapse-hdr{
+    background:var(--md-dark-surface-container,#2b2930)!important;
+    border-bottom-color:var(--md-dark-outline-variant,#49454f)!important;
+    color:var(--md-dark-on-surface,#e6e1e5)!important;
+}
+[data-theme="dark"] .picup-collapse-hdr:hover{background:var(--md-dark-surface-container-high,#36343b)!important;}
+
+/* ── PicUp 配置编辑器容器 ── */
 #picup-gui{
-    border:1px solid #dde1e6;border-radius:8px;background:#f7f8fa;
-    padding:16px;max-width:760px;width:100%;box-sizing:border-box;
-    color:inherit;box-shadow:0 1px 4px rgba(0,0,0,.06);
+    border:none!important;
+    border-radius:0!important;
+    background:var(--md-surface-container-low,#f7f2fa)!important;
+    padding:18px 20px!important;max-width:100%!important;width:100%!important;
+    box-sizing:border-box!important;margin:0!important;
+    color:inherit!important;
 }
+/* 输入控件 */
 .picup-ctrl{
-    border:1px solid #c5cad3;background:#fff;color:#1a1a1a;border-radius:5px;
-    outline:none;font-size:13px;
-    transition:border-color .15s,background .15s,color .15s,box-shadow .15s;
+    border:1px solid var(--md-outline,#79747e)!important;
+    background:var(--md-surface,#fffbfe)!important;
+    color:var(--md-on-surface,#1c1b1f)!important;
+    border-radius:6px!important;outline:none!important;font-size:13px!important;
+    transition:border-color .15s,background .15s,color .15s,box-shadow .15s!important;
 }
-.picup-ctrl:focus{border-color:#6750a4;box-shadow:0 0 0 3px rgba(103,80,164,.15);}
-.picup-input{width:100%;padding:7px 10px;min-height:36px;box-sizing:border-box;}
+.picup-ctrl:focus{border-color:var(--md-primary,#6750a4)!important;box-shadow:0 0 0 3px rgba(103,80,164,.15)!important;}
+.picup-input{width:100%!important;padding:8px 11px!important;min-height:36px!important;box-sizing:border-box!important;}
 /* 工具栏 */
 #picup-toolbar{
-    display:flex;align-items:center;gap:8px;flex-wrap:wrap;
-    margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid #e4e7eb;
+    display:flex!important;align-items:center!important;gap:8px!important;flex-wrap:wrap!important;
+    margin-bottom:16px!important;padding-bottom:14px!important;
+    border-bottom:1px solid var(--md-outline-variant,#cac4d0)!important;
+    border-top:none!important;border-left:none!important;border-right:none!important;
 }
-.picup-profile-label{font-size:13px;font-weight:600;white-space:nowrap;color:#3c3c3c;}
-#picup-profile-row{display:flex;align-items:center;gap:8px;flex:1;min-width:140px;}
-#picup-profile-sel{flex:1;min-width:0;}
-#picup-btn-group{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
+.picup-profile-label{font-size:13px!important;font-weight:600!important;white-space:nowrap!important;color:var(--md-on-surface-variant,#49454f)!important;}
+#picup-profile-row{display:flex!important;align-items:center!important;gap:8px!important;flex:1!important;min-width:140px!important;}
+#picup-profile-sel{flex:1!important;min-width:0!important;}
+#picup-btn-group{display:flex!important;gap:6px!important;flex-wrap:wrap!important;align-items:center!important;}
 /* 字段行 */
-.picup-field-row{margin-bottom:12px;}
-.picup-field-left{display:flex;flex-direction:column;gap:4px;}
-.picup-field-label{font-size:13px;font-weight:600;color:#3c3c3c;}
-.picup-field-desc{margin:0;font-size:12px;line-height:1.5;}
-.picup-hint{color:#6e6e6e;}
+.picup-field-row{margin-bottom:14px!important;}
+.picup-field-left{display:flex!important;flex-direction:column!important;gap:4px!important;}
+.picup-field-label{font-size:13px!important;font-weight:600!important;color:var(--md-on-surface,#1c1b1f)!important;}
+.picup-field-desc{margin:0!important;font-size:12px!important;line-height:1.5!important;}
+.picup-hint{color:var(--md-on-surface-variant,#49454f)!important;}
 /* 按钮 */
 .picup-bar-btn{
-    padding:6px 12px;min-height:32px;border:none;border-radius:5px;
-    font-size:12px;cursor:pointer;white-space:nowrap;
-    transition:opacity .15s,transform .1s;
-    display:inline-flex;align-items:center;justify-content:center;gap:4px;
+    padding:6px 16px!important;min-height:32px!important;border:none!important;border-radius:20px!important;
+    font-size:12px!important;font-weight:500!important;cursor:pointer!important;white-space:nowrap!important;letter-spacing:.02em!important;
+    transition:opacity .15s,box-shadow .15s!important;
+    display:inline-flex!important;align-items:center!important;justify-content:center!important;gap:4px!important;
+    box-sizing:border-box!important;
 }
-.picup-bar-btn:hover{opacity:.85;}
-.picup-bar-btn:active{transform:scale(.97);}
-#picup-add-btn   {background:#6750a4;color:#fff;}
-#picup-rename-btn{background:#2563eb;color:#fff;}
-#picup-del-btn   {background:#b3261e;color:#fff;}
-#picup-apply-btn {background:#16a34a;color:#fff;}
+.picup-bar-btn:hover{opacity:.88!important;box-shadow:0 1px 4px rgba(0,0,0,.15)!important;}
+.picup-bar-btn:active{transform:scale(.97)!important;}
+#picup-add-btn   {background:var(--md-primary,#6750a4)!important;color:var(--md-on-primary,#fff)!important;}
+#picup-rename-btn{background:var(--md-primary-container,#eaddff)!important;color:var(--md-on-surface,#1c1b1f)!important;}
+#picup-del-btn   {background:var(--md-error,#b3261e)!important;color:#fff!important;}
+#picup-apply-btn {background:#16a34a!important;color:#fff!important;}
 /* ── 扩展面板 ── */
-.picup-section-sep{margin:16px 0 12px;border-top:1px solid #e4e7eb;}
-.picup-section-title{font-size:13px;font-weight:700;color:#3c3c3c;margin-bottom:10px;display:flex;align-items:center;gap:6px;}
+.picup-section-sep{margin:16px 0 12px!important;border-top:1px solid var(--md-outline-variant,#cac4d0)!important;border-bottom:none!important;border-left:none!important;border-right:none!important;}
+.picup-section-title{font-size:13px!important;font-weight:700!important;color:var(--md-on-surface-variant,#49454f)!important;margin-bottom:10px!important;display:flex!important;align-items:center!important;gap:6px!important;}
 .picup-ext-card{
-    border:1px solid #e0e3ea;border-radius:6px;margin-bottom:8px;
-    background:#fff;overflow:hidden;transition:border-color .15s;
+    border:1px solid var(--md-outline-variant,#cac4d0)!important;border-radius:6px!important;margin-bottom:8px!important;
+    background:var(--md-surface,#fffbfe)!important;overflow:hidden!important;transition:border-color .15s!important;
 }
-.picup-ext-card.picup-ext-open{border-color:#6750a4;}
+.picup-ext-card.picup-ext-open{border-color:var(--md-primary,#6750a4)!important;}
 .picup-ext-header{
-    display:flex;align-items:center;flex-wrap:wrap;gap:8px;
-    padding:10px 12px;
+    display:flex!important;align-items:center!important;flex-wrap:wrap!important;gap:8px!important;
+    padding:10px 12px!important;
 }
-.picup-ext-toggle-label{display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;}
-.picup-ext-cb{width:16px;height:16px;cursor:pointer;accent-color:#6750a4;}
-.picup-ext-name{font-size:13px;font-weight:600;color:#1a1a1a;}
+.picup-ext-toggle-label{display:flex!important;align-items:center!important;gap:6px!important;cursor:pointer!important;user-select:none!important;}
+.picup-ext-cb{width:16px!important;height:16px!important;cursor:pointer!important;accent-color:var(--md-primary,#6750a4)!important;}
+.picup-ext-name{font-size:13px!important;font-weight:600!important;color:var(--md-on-surface,#1c1b1f)!important;}
 .picup-ext-badge{
-    display:inline-flex;align-items:center;padding:1px 7px;border-radius:10px;
-    font-size:11px;font-weight:600;white-space:nowrap;
+    display:inline-flex!important;align-items:center!important;padding:1px 7px!important;border-radius:10px!important;
+    font-size:11px!important;font-weight:600!important;white-space:nowrap!important;
 }
-.picup-ext-ok{background:#dcfce7;color:#15803d;}
-.picup-ext-unavail{background:#fee2e2;color:#b91c1c;cursor:help;}
-.picup-ext-desc{font-size:12px;color:#6e6e6e;flex:1;min-width:0;}
-.picup-ext-fields{padding:10px 12px 4px;border-top:1px solid #f0f0f0;background:#fafafa;}
+.picup-ext-ok{background:#dcfce7!important;color:#15803d!important;}
+.picup-ext-unavail{background:#fee2e2!important;color:#b91c1c!important;cursor:help!important;}
+.picup-ext-desc{font-size:12px!important;color:var(--md-on-surface-variant,#49454f)!important;flex:1!important;min-width:0!important;}
+.picup-ext-fields{
+    padding:10px 12px 4px!important;border-top:1px solid var(--md-outline-variant,#cac4d0)!important;
+    background:var(--md-surface-container-low,#f7f2fa)!important;
+}
 /* ── 移动端 ── */
 @media(max-width:600px){
-    #picup-gui{padding:12px;border-radius:6px;}
-    #picup-toolbar{flex-direction:column;align-items:stretch;gap:8px;}
-    #picup-profile-row{flex:none;width:100%;}
-    #picup-btn-group{width:100%;}
-    .picup-bar-btn{flex:1;padding:8px 6px;min-height:38px;font-size:13px;}
-    .picup-ext-header{flex-direction:column;align-items:flex-start;}
+    #picup-gui{padding:12px!important;border-radius:6px!important;}
+    #picup-toolbar{flex-direction:column!important;align-items:stretch!important;gap:8px!important;}
+    #picup-profile-row{flex:none!important;width:100%!important;}
+    #picup-btn-group{width:100%!important;}
+    .picup-bar-btn{flex:1!important;padding:8px 6px!important;min-height:38px!important;font-size:13px!important;}
+    .picup-ext-header{flex-direction:column!important;align-items:flex-start!important;}
 }
-@media(max-width:400px){.picup-bar-btn{font-size:12px;padding:7px 4px;}}
-/* ── 暗色模式 ── */
+@media(max-width:400px){.picup-bar-btn{font-size:12px!important;padding:7px 4px!important;}}
+/* ── 暗色模式（使用 AdminBeautify 注入的 --md-dark-* 变量）── */
 l[data-theme="dark"] #picup-gui,
-[data-theme="dark"] #picup-gui{border-color:#49454f;background:#1c1b1f;box-shadow:0 2px 8px rgba(0,0,0,.35);}
+[data-theme="dark"] #picup-gui{
+    border:none!important;
+    background:var(--md-dark-surface-container,#2b2930)!important;
+}
+l[data-theme="dark"] #picup-gui-wrap,
+[data-theme="dark"] #picup-gui-wrap{border-color:var(--md-dark-outline-variant,#49454f)!important;}
 l[data-theme="dark"] #picup-toolbar,
-[data-theme="dark"] #picup-toolbar{border-bottom-color:#3a3740;}
+[data-theme="dark"] #picup-toolbar{border-bottom-color:var(--md-dark-outline-variant,#49454f)!important;}
 l[data-theme="dark"] .picup-profile-label,
-[data-theme="dark"] .picup-profile-label{color:#cac4d0;}
+[data-theme="dark"] .picup-profile-label{color:var(--md-dark-on-surface-variant,#cac4d0)!important;}
 l[data-theme="dark"] .picup-ctrl,
-[data-theme="dark"] .picup-ctrl{border-color:#49454f;background:#2b2930;color:#e6e1e5;}
+[data-theme="dark"] .picup-ctrl{
+    border-color:var(--md-dark-outline,#938f99)!important;
+    background:var(--md-dark-surface,#1c1b1f)!important;
+    color:var(--md-dark-on-surface,#e6e1e5)!important;
+}
 l[data-theme="dark"] .picup-ctrl:focus,
-[data-theme="dark"] .picup-ctrl:focus{border-color:#d0bcff;box-shadow:0 0 0 3px rgba(208,188,255,.2);}
+[data-theme="dark"] .picup-ctrl:focus{border-color:var(--md-dark-primary,#d0bcff)!important;box-shadow:0 0 0 3px rgba(208,188,255,.2)!important;}
 l[data-theme="dark"] .picup-field-label,
-[data-theme="dark"] .picup-field-label{color:#cac4d0;}
+[data-theme="dark"] .picup-field-label{color:var(--md-dark-on-surface,#e6e1e5)!important;}
 l[data-theme="dark"] .picup-hint,
-[data-theme="dark"] .picup-hint{color:#938f99;}
+[data-theme="dark"] .picup-hint{color:var(--md-dark-on-surface-variant,#cac4d0)!important;}
 l[data-theme="dark"] .picup-section-sep,
-[data-theme="dark"] .picup-section-sep{border-top-color:#3a3740;}
+[data-theme="dark"] .picup-section-sep{border-top-color:var(--md-dark-outline-variant,#49454f)!important;}
 l[data-theme="dark"] .picup-section-title,
-[data-theme="dark"] .picup-section-title{color:#cac4d0;}
+[data-theme="dark"] .picup-section-title{color:var(--md-dark-on-surface-variant,#cac4d0)!important;}
 l[data-theme="dark"] .picup-ext-card,
-[data-theme="dark"] .picup-ext-card{border-color:#3a3740;background:#242129;}
+[data-theme="dark"] .picup-ext-card{
+    border-color:var(--md-dark-outline-variant,#49454f)!important;
+    background:var(--md-dark-surface,#1c1b1f)!important;
+}
 l[data-theme="dark"] .picup-ext-card.picup-ext-open,
-[data-theme="dark"] .picup-ext-card.picup-ext-open{border-color:#d0bcff;}
+[data-theme="dark"] .picup-ext-card.picup-ext-open{border-color:var(--md-dark-primary,#d0bcff)!important;}
 l[data-theme="dark"] .picup-ext-name,
-[data-theme="dark"] .picup-ext-name{color:#e6e1e5;}
+[data-theme="dark"] .picup-ext-name{color:var(--md-dark-on-surface,#e6e1e5)!important;}
+l[data-theme="dark"] .picup-ext-desc,
+[data-theme="dark"] .picup-ext-desc{color:var(--md-dark-on-surface-variant,#cac4d0)!important;}
 l[data-theme="dark"] .picup-ext-fields,
-[data-theme="dark"] .picup-ext-fields{border-top-color:#3a3740;background:#1c1b1f;}
+[data-theme="dark"] .picup-ext-fields{
+    border-top-color:var(--md-dark-outline-variant,#49454f)!important;
+    background:var(--md-dark-surface-container,#2b2930)!important;
+}
 </style>
 EOCSS;
+
+        // 折叠初始化 JS（在此定义公共函数，backup 区入口也会复用）
+        $collapseJs = <<<'EOCOLLAPSE'
+<script>
+(function(){
+if(window.__picupCollapseInit) return;
+window.__picupCollapseInit=true;
+
+/**
+ * 为目标元素添加折叠功能（包裹式卡片）。
+ * 创建 .picup-collapse-wrap > .picup-collapse-hdr + el.picup-collapse-body 结构。
+ * el 会被移入 wrap 容器中，原位置由 wrap 替代。
+ */
+window.picupAddCollapse=function(el,title,key,defaultOpen){
+    if(!el||el.dataset.picupColl) return;
+    el.dataset.picupColl='1';
+    var stored=localStorage.getItem('picup_c_'+key);
+    var open=(stored===null)?defaultOpen:(stored==='1');
+    var animating=false;
+
+    /* 创建包裹容器 */
+    var wrap=document.createElement('div');
+    wrap.className='picup-collapse-wrap';
+
+    /* 创建折叠头 */
+    var hdr=document.createElement('div');
+    hdr.className='picup-collapse-hdr'+(open?'':' is-closed');
+    hdr.innerHTML='<span>'+title+'</span><span class="pca">▾</span>';
+
+    /* 将 el 移入 wrap：先在 el 原位置插入 wrap，再把 el 追加到 wrap 中 */
+    el.parentNode.insertBefore(wrap,el);
+    wrap.appendChild(hdr);
+    wrap.appendChild(el);
+
+    /* 给 el 添加 body 类 */
+    el.classList.add('picup-collapse-body');
+    if(!open){
+        el.classList.add('is-closed');
+        el.style.maxHeight='0';
+    } else {
+        el.style.maxHeight='none';
+    }
+
+    function expandEl(){
+        el.classList.remove('is-closed');
+        el.style.maxHeight='0';el.style.opacity='0';el.style.overflow='hidden';
+        var h=el.scrollHeight;
+        requestAnimationFrame(function(){
+            el.style.maxHeight=h+'px';el.style.opacity='1';
+        });
+        animating=true;
+        var done=function(e){
+            if(e&&e.target!==el) return;
+            el.removeEventListener('transitionend',done);
+            animating=false;
+            if(!el.classList.contains('is-closed')){
+                el.style.maxHeight='none';el.style.overflow='visible';
+            }
+        };
+        el.addEventListener('transitionend',done);
+        /* 安全兜底：动画最长 400ms */
+        setTimeout(function(){done({target:el});},400);
+    }
+
+    function collapseEl(){
+        /* 先设定当前展开高度，再在下一帧transition到0 */
+        el.style.overflow='hidden';
+        el.style.maxHeight=el.scrollHeight+'px';
+        requestAnimationFrame(function(){
+            el.style.maxHeight='0';el.style.opacity='0';
+        });
+        animating=true;
+        var done=function(e){
+            if(e&&e.target!==el) return;
+            el.removeEventListener('transitionend',done);
+            animating=false;
+            if(el.classList.contains('is-closed')){
+                el.style.maxHeight='0';
+            }
+        };
+        el.addEventListener('transitionend',done);
+        setTimeout(function(){done({target:el});},400);
+        el.classList.add('is-closed');
+    }
+
+    hdr.addEventListener('click',function(){
+        if(animating){
+            /* 打断当前动画：立刻取消 transition, 清除回调, 反转方向 */
+            el.style.transition='none';
+            var cur=getComputedStyle(el).maxHeight;
+            el.style.maxHeight=cur;
+            /* 重新恢复 transition */
+            void el.offsetHeight; /* force reflow */
+            el.style.transition='';
+            animating=false;
+        }
+        open=!open;
+        hdr.classList.toggle('is-closed',!open);
+        localStorage.setItem('picup_c_'+key,open?'1':'0');
+        if(open){expandEl();}else{collapseEl();}
+    });
+};
+
+function findParentCard(el){
+    /* 如果 el 被 AB 包在 .ab-options-card 中，返回该 card；否则返回 el 本身 */
+    var p=el.parentNode;
+    if(p&&p.classList&&p.classList.contains('ab-options-card')) return p;
+    return null;
+}
+
+function run(){
+    /* 配置编辑器 */
+    var gui=document.getElementById('typecho-option-item-picup-gui');
+    if(gui){
+        var card=findParentCard(gui);
+        window.picupAddCollapse(card||gui,'🎛️ 配置编辑器','editor',false);
+    }
+    /* JSON 原始配置 */
+    var ta=document.querySelector('textarea[name="configJson"]');
+    if(ta){
+        var ul=ta.closest?ta.closest('ul.typecho-option'):null;
+        if(!ul){var p=ta;while(p&&p.tagName!=='UL')p=p.parentNode;ul=p;}
+        if(ul){
+            var card2=findParentCard(ul);
+            window.picupAddCollapse(card2||ul,'📋 JSON 原始配置','json',false);
+        }
+    }
+    /* 配置备份 */
+    var bk=document.getElementById('typecho-option-item-picup-backup');
+    if(bk){
+        var card3=findParentCard(bk);
+        window.picupAddCollapse(card3||bk,'💾 配置备份','backup',false);
+    }
+}
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',run);}
+else{run();}
+document.addEventListener('ab:pageload',function(){
+    /* AB AJAX 切换页面后重新初始化 —— 先清除旧标记 */
+    document.querySelectorAll('[data-picup-coll]').forEach(function(el){delete el.dataset.picupColl;});
+    window.__picupCollapseInit=false;
+    run();
+});
+})();
+</script>
+EOCOLLAPSE;
 
         $toolbar = '<div id="picup-toolbar">'
             . '<div id="picup-profile-row">'
@@ -1593,7 +2239,7 @@ EOCSS;
             . '</div>'
             . '</div>';
 
-        return $css
+        return $css . $collapseJs
             . '<ul class="typecho-option" id="typecho-option-item-picup-gui"><li>'
             . '<label class="typecho-label">' . _t('配置编辑器') . '</label>'
             . '<div id="picup-gui">'

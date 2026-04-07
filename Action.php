@@ -116,8 +116,9 @@ class Action extends Widget implements ActionInterface
     {
         try {
             $rows = $this->db->fetchAll(
-                "SELECT `id`, `label`, `default_profile`, `backup_date` "
-                . "FROM `{$this->table}` ORDER BY `backup_date` DESC"
+                $this->db->select('id', 'label', 'default_profile', 'backup_date')
+                    ->from('table.PicUpBackup')
+                    ->order('backup_date', Db::SORT_DESC)
             );
             $this->jsonSuccess(['list' => $rows ?: []]);
         } catch (\Exception $e) {
@@ -137,7 +138,7 @@ class Action extends Widget implements ActionInterface
 
         try {
             $row = $this->db->fetchRow(
-                "SELECT * FROM `{$this->table}` WHERE `id` = {$id}"
+                $this->db->select()->from('table.PicUpBackup')->where('id = ?', $id)
             );
         } catch (\Exception $e) {
             $this->jsonError('读取备份失败：' . $e->getMessage());
