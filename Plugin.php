@@ -5,7 +5,7 @@
  *
  * @package PicUp
  * @author LHL
- * @version 1.2.0
+ * @version 1.2.1
  * @link https://github.com/lhl77/Typecho-Plugin-PicUp
  */
 
@@ -158,6 +158,13 @@ class Plugin implements PluginInterface
         // 建备份表（若不存在）
         self::createBackupTable();
 
+        // 迁移：确保新增的 suffixProfiles 选项存在（插件升级未经禁用/启用时自动补齐）
+        self::ensureOption('suffixProfiles', '{}');
+
+        // 清理旧版本保存的 HtmlElement 占位键（__picup_html_*），
+        // 这些键曾因 addInput 误用而被写入配置，key 编号漂移会导致 getInput() 返回 null 崩溃
+        self::cleanupStaleOptions();
+
         // 清除 PHP OPcache 缓存，确保插件文件更新后立即生效
         if (function_exists('opcache_reset')) {
             opcache_reset();
@@ -195,6 +202,108 @@ class Plugin implements PluginInterface
             // ignore
         }
         return 'mysql'; // MySQL / MariaDB / Mysqli
+    }
+
+    /**
+     * 确保插件选项存在（用于升级迁移）。
+     * 若选项不在数据库中，自动插入默认值，避免升级后未经禁用/启用导致读取报错。
+     */
+    private static function ensureOption(string $name, string $defaultValue): void
+    {
+        try {
+            $db    = Db::get();
+            $table = $db->getPrefix() . 'options';
+            // 读取当前插件配置
+            $row = $db->fetchRow(
+                $db->select('value')->from($table)->where('name = ?', 'plugin:PicUp')
+            );
+            if (!$row) {
+                return; // 插件尚未有任何配置记录
+            }
+            $settings = unserialize($row['value']);
+            if (!is_array($settings)) {
+                $settings = [];
+            }
+            if (!array_key_exists($name, $settings)) {
+                $settings[$name] = $defaultValue;
+                $db->query(
+                    $db->update($table)
+                        ->rows(['value' => serialize($settings)])
+                        ->where('name = ?', 'plugin:PicUp')
+                );
+            }
+        } catch (\Throwable $e) {
+            error_log('[PicUp] ensureOption(' . $name . '): ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * 清理插件配置中残留的 HtmlElement 占位键（__picup_html_*）。
+     * 旧版本使用 $form->addInput(new HtmlElement(...))，导致这些键被写入配置。
+     * 当表单元素数量变化后，编号漂移使 getInput() 返回 null 而崩溃。
+     */
+    private static function cleanupStaleOptions(): void
+    {
+        try {
+            $db    = Db::get();
+            $table = $db->getPrefix() . 'options';
+            $row   = $db->fetchRow(
+                $db->select('value')->from($table)->where('name = ?', 'plugin:PicUp')
+            );
+            if (!$row) {
+                return;
+            }
+            $settings = unserialize($row['value']);
+            if (!is_array($settings)) {
+                return;
+            }
+            $dirty = false;
+            foreach (array_keys($settings) as $key) {
+                if (strpos($key, '__picup_html_') === 0) {
+                    unset($settings[$key]);
+                    $dirty = true;
+                }
+            }
+            if ($dirty) {
+                $cleanedSerial = serialize($settings);
+
+                // 1. 更新数据库
+                $db->query(
+                    $db->update($table)
+                        ->rows(['value' => $cleanedSerial])
+                        ->where('name = ?', 'plugin:PicUp')
+                );
+
+                // 2. 同步更新 Options 内存单例，避免当前请求仍使用旧缓存
+                try {
+                    $optsObj = Options::alloc();
+
+                    // 2a. 更新 Widget::$row['plugin:PicUp']（protected 属性，通过父类反射访问）
+                    $rowProp = (new \ReflectionClass('Typecho\Widget'))->getProperty('row');
+                    $rowProp->setAccessible(true);
+                    $rowData = $rowProp->getValue($optsObj);
+                    if (is_array($rowData)) {
+                        $rowData['plugin:PicUp'] = $cleanedSerial;
+                        $rowProp->setValue($optsObj, $rowData);
+                    }
+
+                    // 2b. 清除 Options::$pluginConfig['PicUp'] 缓存，
+                    //     让下次调用 plugin('PicUp') 从更新后的 row 重新反序列化
+                    $pcProp = (new \ReflectionClass(Options::class))->getProperty('pluginConfig');
+                    $pcProp->setAccessible(true);
+                    $pcData = $pcProp->getValue($optsObj);
+                    if (is_array($pcData)) {
+                        unset($pcData['PicUp']);
+                        $pcProp->setValue($optsObj, $pcData);
+                    }
+                } catch (\Throwable $e) {
+                    // 反射失败时仅记录日志；config() 末尾的安全网会兜底
+                    error_log('[PicUp] cleanupStaleOptions 内存刷新失败：' . $e->getMessage());
+                }
+            }
+        } catch (\Throwable $e) {
+            error_log('[PicUp] cleanupStaleOptions: ' . $e->getMessage());
+        }
     }
 
     /**
@@ -299,7 +408,7 @@ class Plugin implements PluginInterface
      *     confirm → resolve(true/false)
      *     prompt  → resolve(string/null)
      *
-     * 优先使用 AdminBeautify.alert / .confirm / .prompt 公开 API（v2.1.32+）；
+     * 优先使用 AdminBeautify.alert / .confirm / .prompt 公开 API（v2.1.36+）；
      * 降级到 _abPendingConfirm / _abPendingPrompt 全局回调（旧版 AB）；
      * 无 AB 时使用浏览器原生同步对话框。
      */
@@ -488,6 +597,22 @@ display:none;max-width:300px;line-height:1.4;pointer-events:none;transition:opac
         obs.observe(document.body||document.documentElement,{childList:true,subtree:true});
     }
 
+    /* ── 辅助函数：获取当前可见的 PicUp 上传方案选择器 ── */
+    function getVisiblePuSel(){
+        var sels=document.querySelectorAll('#pu-profile-sel');
+        for(var i=sels.length-1;i>=0;i--){
+            if(sels[i].offsetParent!==null) return sels[i];
+        }
+        return sels.length?sels[sels.length-1]:null;
+    }
+    function getVisiblePuCb(){
+        var cbs=document.querySelectorAll('#pu-force-cb');
+        for(var i=cbs.length-1;i>=0;i--){
+            if(cbs[i].offsetParent!==null) return cbs[i];
+        }
+        return cbs.length?cbs[cbs.length-1]:null;
+    }
+
     /* ── XHR 拦截：为 AdminBeautify 的 XHR 上传注入方案头 ── */
     (function(){
         var _open=XMLHttpRequest.prototype.open;
@@ -497,9 +622,10 @@ display:none;max-width:300px;line-height:1.4;pointer-events:none;transition:opac
         };
         var _send=XMLHttpRequest.prototype.send;
         XMLHttpRequest.prototype.send=function(body){
-            if(this.__pu_url&&this.__pu_url.indexOf('do=upload-media')!==-1){
-                var sel=document.getElementById('pu-profile-sel');
-                var cb=document.getElementById('pu-force-cb');
+            var u=this.__pu_url||'';
+            if(u.indexOf('/action/upload')!==-1||u.indexOf('do=upload-media')!==-1||u.indexOf('do=upload')!==-1){
+                var sel=getVisiblePuSel();
+                var cb=getVisiblePuCb();
                 if(sel&&sel.value){
                     try{this.setRequestHeader('X-PicUp-Profile',sel.value);}catch(e){}
                 }
@@ -518,12 +644,11 @@ display:none;max-width:300px;line-height:1.4;pointer-events:none;transition:opac
         if(urlStr.indexOf('/action/upload')!==-1){
             /* 注入 PicUp 方案覆盖参数 */
             if(init&&init.body instanceof FormData){
-                var cfg=window.__PICUP_CFG__||{};
-                var sel=document.getElementById('pu-profile-sel');
-                var forceCb=document.getElementById('pu-force-cb');
+                var sel=getVisiblePuSel();
+                var forceCb=getVisiblePuCb();
                 var selProfile=sel?sel.value:'';
-                /* 仅当选择了非默认方案时注入（减少不必要的参数） */
-                if(selProfile&&selProfile!==(cfg.defaultProfile||'')){
+                /* 始终发送选择的方案名，确保上传面板的选择生效 */
+                if(selProfile){
                     init.body.append('_picup_profile',selProfile);
                 }
                 if(forceCb&&forceCb.checked){
@@ -569,14 +694,17 @@ END_SCRIPT;
 
     public static function config(Form $form)
     {
+        // 清理旧版本遗留的 HtmlElement 占位键，防止 getInput() 返回 null 崩溃
+        self::cleanupStaleOptions();
+
         // -1. OpenSSL / TLS 版本检测警告横幅
         $sslWarningHtml = self::buildSslWarningHtml();
         if ($sslWarningHtml) {
-            $form->addInput(new HtmlElement($sslWarningHtml));
+            $form->addItem(new HtmlElement($sslWarningHtml));
         }
 
         // 0. 顶部插件信息 & AdminBeautify 推荐
-        $form->addInput(new HtmlElement(<<<'HTML'
+        $form->addItem(new HtmlElement(<<<'HTML'
 <style>
 .picup-info-bar{display:flex!important;flex-wrap:wrap!important;gap:10px!important;align-items:stretch!important;margin:0 0 20px!important;}
 .picup-info-card{
@@ -604,13 +732,13 @@ END_SCRIPT;
 </style>
 <div class="picup-info-bar">
   <div class="picup-info-card">
-    <h4>📦 PicUp — 多存储后端上传&处理插件</h4>
+    <h4>PicUp — 多存储后端上传&处理插件</h4>
     <p>
       作者：<a href="https://blog.lhl.one" target="_blank">LHL</a>　|　
       <a href="https://github.com/lhl77/Typecho-Plugin-PicUp" target="_blank">GitHub</a>　|　
       <a href="https://blog.lhl.one/artical/1026.html" target="_blank">使用文档</a>
     </p>
-    <p>版本：v1.2.0</p>
+    <p>版本：v1.2.1</p>
   </div>
   <div class="picup-info-card picup-ab-card">
     <h4>✨ 推荐安装 Admin Beautify<span class="ab-badge">AB-Store</span></h4>
@@ -627,8 +755,8 @@ HTML));
             'defaultProfile',
             null,
             'default',
-            _t('当前使用的配置方案'),
-            _t('填写下方 JSON 配置中某个方案的 key，该方案将用于文件上传。')
+            _t('全局默认方案'),
+            _t('填写下方 JSON 配置中某个方案的 key，该方案将用于文件上传。<br/>优先级：<b>后缀自定义方案 > 文件接管范围 > 全局默认方案</b>')
         );
         $form->addInput($defaultProfile);
 
@@ -661,7 +789,47 @@ HTML));
             ];
         }
 
-        $form->addInput(new HtmlElement(self::buildGuiHtml($driversMeta, $extensionsMeta)));
+        $form->addItem(new HtmlElement(self::buildGuiHtml($driversMeta, $extensionsMeta)));
+
+        // 文件接管范围（全局，不随方案切换）—— 保持原始 addInput 顺序不变
+        $mimeScope = new \Typecho\Widget\Helper\Form\Element\Radio(
+            'mimeScope',
+            [
+                'image' => _t('只接管图片（gif jpg jpeg png bmp tiff webp avif svg）'),
+                'all'   => _t('接管所有文件（图片 + 多媒体 + 文档等）'),
+            ],
+            'image',
+            _t('文件接管范围'),
+            _t('选择「只接管图片」时，PicUp 仅处理图片类型的上传；其他类型文件将交由 Typecho 默认处理器接管（存储到本地服务器）。')
+        );
+        $form->addInput($mimeScope);
+
+        // 后缀方案映射（JSON）—— 新增字段，放在末尾以避免影响已有选项顺序
+        $existingSuffixProfiles = '{}';
+        try {
+            $existingOpts = Options::alloc()->plugin('PicUp');
+            $existingSuffixProfiles = (string)($existingOpts->suffixProfiles ?? '{}') ?: '{}';
+        } catch (\Throwable $e) {
+            // ignore
+        }
+        $suffixProfiles = new Textarea(
+            'suffixProfiles',
+            null,
+            $existingSuffixProfiles,
+            _t('后缀方案映射（JSON）'),
+            _t('为特定文件后缀名指定专用上传方案。<br/>格式：<code>{"jpg,jpeg,png": "方案名", "gif,webp": "另一个方案名"}</code>。'
+                . '<br/>优先级：后缀自定义方案 &gt; 上传时选择的方案（仅在勾选「忽略范围限制」时生效） &gt; 全局默认方案。'
+                . '<br/>若指定的方案已被删除，则自动回退到全局默认方案。')
+        );
+        $suffixProfiles->input->setAttribute(
+            'style',
+            'width:100%;max-width:800px;height:80px;font-family:monospace;font-size:13px;display:block;margin:0 auto;'
+        );
+        $form->addInput($suffixProfiles);
+
+        // 方案规则：后缀方案 GUI 编辑器
+        $form->addItem(new HtmlElement(self::buildSuffixProfilesGuiHtml()));
+
 
         // 3. JSON 原始配置
         $configJson = new Textarea(
@@ -679,27 +847,31 @@ HTML));
         );
         $form->addInput($configJson);
 
-        // 4. 备份管理区域
-        $form->addInput(new HtmlElement(self::buildBackupHtml()));
+        // 备份管理区域
+        $form->addItem(new HtmlElement(self::buildBackupHtml()));
 
-        // -0. 备份数据表缺失警告横幅
+        // 备份数据表缺失警告横幅
         $dbWarningHtml = self::buildDbWarningHtml();
         if ($dbWarningHtml) {
-            $form->addInput(new HtmlElement($dbWarningHtml));
+            $form->addItem(new HtmlElement($dbWarningHtml));
         }
+
         
-        // 1-b. 文件接管范围（全局设置，不随方案切换）
-        $mimeScope = new \Typecho\Widget\Helper\Form\Element\Radio(
-            'mimeScope',
-            [
-                'image' => _t('只接管图片（gif jpg jpeg png bmp tiff webp avif svg）'),
-                'all'   => _t('接管所有文件（图片 + 多媒体 + 文档等）'),
-            ],
-            'image',
-            _t('文件接管范围'),
-            _t('选择「只接管图片」时，PicUp 仅处理图片类型的上传；其他类型文件将交由 Typecho 默认处理器接管（存储到本地服务器）。')
-        );
-        $form->addInput($mimeScope);
+        // 安全网：将 DB 中所有在表单里找不到对应输入的 key，添加一个不输出任何 HTML 的虚拟占位元素。
+        // 这样 Config.php 的 $form->getInput($key)->value($val) 就不会对 null 调用 value()。
+        // （仅在反射清理失败时起保护作用；如果反射成功，Options 内存已是干净数据，操岁不会进入此分支）
+        try {
+            $savedOpts = Options::alloc()->plugin('PicUp');
+            foreach ($savedOpts as $key => $val) {
+                if (!$form->getInput($key)) {
+                    $dummy = new HtmlElement('');
+                    $dummy->name = $key;
+                    $form->addInput($dummy);
+                }
+            }
+        } catch (\Throwable $e) {
+            // ignore
+        }
     }
 
     public static function personalConfig(Form $form) {}
@@ -891,16 +1063,31 @@ HTML;
         }
         $forceUpload = !empty($_POST['_picup_force']) || !empty($_SERVER['HTTP_X_PICUP_FORCE']);
 
+        // 后缀自定义方案：最高优先级
+        $suffixProfile = self::getSuffixProfile($ext);
+
         // 注意：不能直接 return false —— Typecho Plugin::call() 会将 signal 无条件置为 true，
         // 导致默认本地存储逻辑被跳过，上传彻底失败。必须自行完成本地存储并返回结果数组。
-        if (!$forceUpload && !self::shouldHandleFile($file, $ext)) {
+        if (!$suffixProfile && !$forceUpload && !self::shouldHandleFile($file, $ext)) {
             return self::_localUpload($file, $ext);
         }
 
-        // 优先使用上传窗口覆盖的方案，否则使用全局默认方案
-        if ($overrideProfile !== '') {
-            $driver      = self::getDriverForProfile($overrideProfile);
-            $activeConfig = self::getActiveConfigForProfile($overrideProfile) ?? [];
+        // 优先级：后缀自定义方案 > 上传时选择的方案（仅 forceUpload 时生效） > 全局默认方案
+        $effectiveProfile = '';
+        if ($suffixProfile !== '') {
+            $effectiveProfile = $suffixProfile;
+        } elseif ($overrideProfile !== '') {
+            $effectiveProfile = $overrideProfile;
+        }
+
+        if ($effectiveProfile !== '') {
+            $driver      = self::getDriverForProfile($effectiveProfile);
+            $activeConfig = self::getActiveConfigForProfile($effectiveProfile) ?? [];
+            // 指定的方案不存在（已被删除），回退到全局默认
+            if (!$driver) {
+                $driver      = self::getDriver();
+                $activeConfig = self::getActiveConfig() ?? [];
+            }
         } else {
             $driver      = self::getDriver();
             $activeConfig = self::getActiveConfig() ?? [];
@@ -942,8 +1129,17 @@ HTML;
         }
 
         if ($uploadedUrl === false) {
-            error_log('[PicUp] uploadHandle: 驱动上传失败，driver=' . get_class($driver) . '，remotePath=' . $remotePath);
-            return false;
+            $driverClass = get_class($driver);
+            // 尝试从 WebDavDriver 读取详细错误信息（HTTP 状态码 + 响应片段）
+            $detail = '';
+            if (property_exists($driverClass, 'lastError')) {
+                $detail = $driverClass::$lastError;
+            }
+            $msg = '[PicUp] 上传失败（' . basename(str_replace('\\', '/', $driverClass)) . '）'
+                . ($detail !== '' ? '：' . $detail : '，remotePath=' . $remotePath);
+            error_log($msg);
+            // 抛出异常，使 AdminBeautify 等有 try/catch 的调用方能直接向用户展示真实原因
+            throw new \RuntimeException($msg);
         }
 
         return [
@@ -974,13 +1170,28 @@ HTML;
         }
         $forceUpload = !empty($_POST['_picup_force']) || !empty($_SERVER['HTTP_X_PICUP_FORCE']);
 
-        if (!$forceUpload && !self::shouldHandleFile($file, $ext)) {
+        // 后缀自定义方案：最高优先级
+        $suffixProfile = self::getSuffixProfile($ext);
+
+        if (!$suffixProfile && !$forceUpload && !self::shouldHandleFile($file, $ext)) {
             return self::_localUpload($file, $ext);
         }
 
-        if ($overrideProfile !== '') {
-            $driver       = self::getDriverForProfile($overrideProfile);
-            $activeConfig = self::getActiveConfigForProfile($overrideProfile) ?? [];
+        // 优先级：后缀自定义方案 > 上传时选择的方案（仅 forceUpload 时生效） > 全局默认方案
+        $effectiveProfile = '';
+        if ($suffixProfile !== '') {
+            $effectiveProfile = $suffixProfile;
+        } elseif ($overrideProfile !== '') {
+            $effectiveProfile = $overrideProfile;
+        }
+
+        if ($effectiveProfile !== '') {
+            $driver       = self::getDriverForProfile($effectiveProfile);
+            $activeConfig = self::getActiveConfigForProfile($effectiveProfile) ?? [];
+            if (!$driver) {
+                $driver       = self::getDriver();
+                $activeConfig = self::getActiveConfig() ?? [];
+            }
         } else {
             $driver       = self::getDriver();
             $activeConfig = self::getActiveConfig() ?? [];
@@ -1037,7 +1248,15 @@ HTML;
         }
 
         if ($uploadedUrl === false) {
-            return false;
+            $driverClass = get_class($driver);
+            $detail = '';
+            if (property_exists($driverClass, 'lastError')) {
+                $detail = $driverClass::$lastError;
+            }
+            $msg = '[PicUp] 修改文件上传失败（' . basename(str_replace('\\', '/', $driverClass)) . '）'
+                . ($detail !== '' ? '：' . $detail : '，remotePath=' . $remotePath);
+            error_log($msg);
+            throw new \RuntimeException($msg);
         }
 
         return [
@@ -1092,7 +1311,13 @@ HTML;
             );
         }
 
-        // 远程路径（完整 URL 或驱动专属格式）：使用 PicUp 驱动生成访问 URL
+        // 已是完整 URL（由 Lsky Pro、Imgur 等驱动直接存储的），直接返回，
+        // 不再通过当前驱动的 getUrl() 生成，避免错误地加上当前方案的前缀
+        if (preg_match('#^https?://#i', $path)) {
+            return $path;
+        }
+
+        // 远程相对路径（如 2025/07/abc.jpg）：使用 PicUp 驱动生成访问 URL
         $driver = self::getDriver();
         if (!$driver) {
             return $path;
@@ -1119,6 +1344,45 @@ HTML;
             return null;
         }
         return $all[$profileKey];
+    }
+
+    /**
+     * 根据文件后缀名查找自定义方案映射。
+     * 返回匹配的方案名称，无匹配时返回空字符串。
+     * 映射格式：{"jpg,jpeg,png": "profileName", "gif,webp": "anotherProfile"}
+     */
+    private static function getSuffixProfile(string $ext): string
+    {
+        try {
+            $pluginConfig = Options::alloc()->plugin('PicUp');
+            $suffixJson = (string)($pluginConfig->suffixProfiles ?? '{}') ?: '{}';
+        } catch (\Throwable $e) {
+            return '';
+        }
+
+        $mapping = json_decode($suffixJson, true);
+        if (!is_array($mapping)) {
+            return '';
+        }
+
+        $extLower = strtolower($ext);
+        foreach ($mapping as $suffixes => $profileName) {
+            $suffixList = array_map('trim', explode(',', strtolower($suffixes)));
+            if (in_array($extLower, $suffixList, true)) {
+                $profileName = trim((string)$profileName);
+                if ($profileName === '') {
+                    continue;
+                }
+                // 验证方案是否仍然存在
+                $config = self::getActiveConfigForProfile($profileName);
+                if ($config !== null) {
+                    return $profileName;
+                }
+                // 方案已被删除，跳过此映射（回退到下一优先级）
+                error_log('[PicUp] getSuffixProfile: 后缀 "' . $ext . '" 映射的方案 "' . $profileName . '" 不存在，已跳过');
+            }
+        }
+        return '';
     }
 
     /**
@@ -1575,6 +1839,133 @@ HTML;
 HTML;
     }
 
+    /**
+     * 构建后缀自定义方案 GUI 编辑器 HTML
+     */
+    private static function buildSuffixProfilesGuiHtml(): string
+    {
+        return <<<'HTML'
+<ul class="typecho-option" id="typecho-option-item-picup-suffix-gui"><li>
+<label class="typecho-label">后缀自定义方案编辑器</label>
+<div id="picup-suffix-gui">
+<style>
+#picup-suffix-gui{max-width:800px;margin:0 auto;padding:12px 16px;background:var(--md-surface-container-low,#f7f2fa);border:1px solid var(--md-outline-variant,#cac4d0);border-radius:8px;}
+.ps-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;}
+.ps-row input[type="text"]{flex:1;min-width:120px;padding:6px 10px;border:1px solid var(--md-outline,#79747e);border-radius:6px;font-size:13px;font-family:monospace;background:var(--md-surface,#fffbfe);color:var(--md-on-surface,#1c1b1f);}
+.ps-row select{min-width:120px;padding:6px 10px;border:1px solid var(--md-outline,#79747e);border-radius:6px;font-size:13px;background:var(--md-surface,#fffbfe);color:var(--md-on-surface,#1c1b1f);}
+.ps-del-btn{padding:4px 10px;border:none;border-radius:16px;background:var(--md-error,#b3261e);color:#fff;font-size:12px;cursor:pointer;white-space:nowrap;}
+.ps-del-btn:hover{opacity:.85;}
+.ps-add-btn{padding:6px 14px;border:none;border-radius:16px;background:var(--md-primary,#6750a4);color:#fff;font-size:12px;font-weight:500;cursor:pointer;margin-top:4px;}
+.ps-add-btn:hover{opacity:.88;}
+.ps-hint{font-size:12px;color:var(--md-on-surface-variant,#49454f);margin:8px 0 0;}
+.ps-empty{font-size:13px;color:var(--md-on-surface-variant,#49454f);padding:8px 0;}
+[data-theme="dark"] #picup-suffix-gui{background:var(--md-dark-surface-container,#2b2930);border-color:var(--md-dark-outline-variant,#49454f);}
+[data-theme="dark"] .ps-row input[type="text"],[data-theme="dark"] .ps-row select{background:var(--md-dark-surface,#1c1b1f);border-color:var(--md-dark-outline,#938f99);color:var(--md-dark-on-surface,#e6e1e5);}
+[data-theme="dark"] .ps-hint,[data-theme="dark"] .ps-empty{color:var(--md-dark-on-surface-variant,#cac4d0);}
+</style>
+<div id="ps-list"></div>
+<button type="button" class="ps-add-btn" id="ps-add-btn">+ 添加后缀映射</button>
+<p class="ps-hint">每行指定一组文件后缀（逗号分隔，如 <code>jpg,jpeg,png</code>）及其对应的上传方案。修改实时同步到上方 JSON。</p>
+</div>
+<script>
+(function(){
+    var listWrap=document.getElementById('ps-list');
+    var addBtn=document.getElementById('ps-add-btn');
+    var ta=document.querySelector('textarea[name="suffixProfiles"]');
+    if(!ta) return;
+
+    function getProfileKeys(){
+        var cfgTa=document.querySelector('textarea[name="configJson"]');
+        if(!cfgTa) return [];
+        try{return Object.keys(JSON.parse(cfgTa.value)||{});}catch(e){return [];}
+    }
+
+    function getMapping(){
+        try{return JSON.parse(ta.value)||{};}catch(e){return {};}
+    }
+    function saveMapping(m){
+        ta.value=JSON.stringify(m,null,2);
+    }
+
+    function render(){
+        var m=getMapping();
+        var keys=Object.keys(m);
+        var profiles=getProfileKeys();
+        listWrap.innerHTML='';
+        if(!keys.length){
+            var empty=document.createElement('div');empty.className='ps-empty';
+            empty.textContent='暂无后缀映射规则，点击下方按钮添加。';
+            listWrap.appendChild(empty);
+            return;
+        }
+        keys.forEach(function(suffixes){
+            var profileName=m[suffixes]||'';
+            var row=document.createElement('div');row.className='ps-row';
+
+            var inp=document.createElement('input');inp.type='text';inp.value=suffixes;
+            inp.placeholder='后缀名，如 jpg,jpeg,png';
+            inp.title='文件后缀名（逗号分隔，不含点号）';
+            row.appendChild(inp);
+
+            var sel=document.createElement('select');
+            var optEmpty=document.createElement('option');optEmpty.value='';optEmpty.textContent='— 选择方案 —';
+            sel.appendChild(optEmpty);
+            profiles.forEach(function(p){
+                var o=document.createElement('option');o.value=p;o.textContent=p;
+                if(p===profileName)o.selected=true;
+                sel.appendChild(o);
+            });
+            if(profileName&&profiles.indexOf(profileName)===-1){
+                var oMissing=document.createElement('option');oMissing.value=profileName;
+                oMissing.textContent=profileName+' (已删除)';oMissing.selected=true;
+                oMissing.style.color='#b3261e';sel.appendChild(oMissing);
+            }
+            row.appendChild(sel);
+
+            var del=document.createElement('button');del.type='button';del.className='ps-del-btn';
+            del.textContent='删除';
+            row.appendChild(del);
+
+            listWrap.appendChild(row);
+
+            function sync(){
+                var nm=getMapping();
+                var oldKey=suffixes;
+                var newKey=inp.value.trim();
+                var newVal=sel.value;
+                if(oldKey!==newKey) delete nm[oldKey];
+                if(newKey) nm[newKey]=newVal;
+                saveMapping(nm);
+            }
+            inp.addEventListener('change',function(){sync();suffixes=inp.value.trim();});
+            inp.addEventListener('input',function(){sync();suffixes=inp.value.trim();});
+            sel.addEventListener('change',sync);
+            del.addEventListener('click',function(){
+                var nm=getMapping();delete nm[suffixes];saveMapping(nm);render();
+            });
+        });
+    }
+
+    addBtn.addEventListener('click',function(){
+        var m=getMapping();m['']='';;saveMapping(m);render();
+        var rows=listWrap.querySelectorAll('.ps-row');
+        if(rows.length){var lastInp=rows[rows.length-1].querySelector('input');if(lastInp)lastInp.focus();}
+    });
+
+    ta.addEventListener('blur',render);
+    /* 监听 configJson 变化以更新方案下拉列表 */
+    var cfgTa=document.querySelector('textarea[name="configJson"]');
+    if(cfgTa) cfgTa.addEventListener('blur',render);
+
+    if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',render);}
+    else{render();}
+    document.addEventListener('ab:pageload',render);
+})();
+</script>
+</li></ul>
+HTML;
+    }
+
     private static function buildGuiHtml(array $driversMeta, array $extensionsMeta = []): string
     {
         $driversJson    = json_encode($driversMeta,    JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT);
@@ -1927,10 +2318,12 @@ EOJS;
     list-style:none!important;
     transition:max-height .3s ease,opacity .2s ease!important;
     opacity:1!important;
+    padding:0 16px 16px!important;
 }
-.picup-collapse-body.is-closed{max-height:0!important;opacity:0!important;overflow:hidden!important;}
+.picup-collapse-body.is-closed{max-height:0!important;opacity:0!important;overflow:hidden!important;padding:0!important;}
 /* 隐藏折叠体内的 Typecho 原生 label（标题已由折叠头部展示） */
-.picup-collapse-body > li > .typecho-label{display:none!important;}
+.picup-collapse-body > li > .typecho-label,
+.picup-collapse-body > div > ul.typecho-option > li > .typecho-label{display:none!important;}
 /* 覆盖 AB 包裹：折叠体不需要 ab-options-card 的样式 */
 .picup-collapse-wrap .ab-options-card{
     border:none!important;border-radius:0!important;margin-top:0!important;
@@ -2190,29 +2583,43 @@ function findParentCard(el){
     return null;
 }
 
+/* 找到 input/textarea 所在的最近 ul.typecho-option（或其 AB 卡片） */
+function findUlOrCard(el){
+    if(!el) return null;
+    var ul=el.closest?el.closest('ul.typecho-option'):null;
+    if(!ul){var p=el;while(p&&p.tagName!=='UL')p=p.parentNode;ul=p||null;}
+    return ul?(findParentCard(ul)||ul):null;
+}
+/* 将多个元素合并到一个 div 后折叠；只有一项时直接折叠该元素 */
+function groupCollapse(targets,title,key,open){
+    targets=targets.filter(Boolean);
+    if(!targets.length) return;
+    if(targets.length===1){window.picupAddCollapse(targets[0],title,key,open);return;}
+    var grp=document.createElement('div');
+    targets[0].parentNode.insertBefore(grp,targets[0]);
+    targets.forEach(function(t){grp.appendChild(t);});
+    window.picupAddCollapse(grp,title,key,open);
+}
 function run(){
     /* 配置编辑器 */
     var gui=document.getElementById('typecho-option-item-picup-gui');
     if(gui){
         var card=findParentCard(gui);
-        window.picupAddCollapse(card||gui,'🎛️ 配置编辑器','editor',false);
+        window.picupAddCollapse(card||gui,'配置编辑器','editor',false);
     }
-    /* JSON 原始配置 */
-    var ta=document.querySelector('textarea[name="configJson"]');
-    if(ta){
-        var ul=ta.closest?ta.closest('ul.typecho-option'):null;
-        if(!ul){var p=ta;while(p&&p.tagName!=='UL')p=p.parentNode;ul=p;}
-        if(ul){
-            var card2=findParentCard(ul);
-            window.picupAddCollapse(card2||ul,'📋 JSON 原始配置','json',false);
-        }
-    }
+    /* JSON 配置：configJson + suffixProfiles 合并到一个折叠 */
+    groupCollapse([
+        findUlOrCard(document.querySelector('textarea[name="configJson"]')),
+        findUlOrCard(document.querySelector('textarea[name="suffixProfiles"]'))
+    ],'JSON 配置','json',false);
     /* 配置备份 */
     var bk=document.getElementById('typecho-option-item-picup-backup');
-    if(bk){
-        var card3=findParentCard(bk);
-        window.picupAddCollapse(card3||bk,'💾 配置备份','backup',false);
-    }
+    if(bk){ groupCollapse([findParentCard(bk)||bk],'配置备份','backup',false); }
+    /* 方案规则：文件接管范围 + 后缀方案 GUI */
+    groupCollapse([
+        findUlOrCard(document.querySelector('input[name="mimeScope"]')),
+        (function(){ var s=document.getElementById('typecho-option-item-picup-suffix-gui'); return s?(findParentCard(s)||s):null; })()
+    ],'方案规则','suffixrule',false);
 }
 if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',run);}
 else{run();}
@@ -2234,7 +2641,7 @@ EOCOLLAPSE;
             . '<div id="picup-btn-group">'
             . '<button type="button" id="picup-add-btn"    class="picup-bar-btn">+ ' . _t('添加') . '</button>'
             . '<button type="button" id="picup-rename-btn" class="picup-bar-btn">' . _t('重命名') . '</button>'
-            . '<button type="button" id="picup-apply-btn"  class="picup-bar-btn">' . _t('应用此方案') . '</button>'
+            . '<button type="button" id="picup-apply-btn"  class="picup-bar-btn">' . _t('设为全局') . '</button>'
             . '<button type="button" id="picup-del-btn"    class="picup-bar-btn">' . _t('删除') . '</button>'
             . '</div>'
             . '</div>';

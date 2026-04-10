@@ -17,6 +17,12 @@ class WebDavDriver implements DriverInterface
     /** @var array 当前配置 */
     private $config;
 
+    /**
+     * 最近一次上传失败的详情，由 Plugin::uploadHandle 读取后向用户展示。
+     * 格式：'HTTP {code}：{response_snippet}'
+     */
+    public static $lastError = '';
+
     public function __construct(array $config)
     {
         $this->config = $config;
@@ -96,6 +102,7 @@ class WebDavDriver implements DriverInterface
         $basePath = rtrim($this->config['basePath'] ?? '', '/');
 
         if (empty($endpoint) || empty($username) || empty($password)) {
+            error_log('[PicUp][WebDAV] upload: 缺少必要配置（endpoint/username/password）');
             return false;
         }
 
@@ -108,21 +115,81 @@ class WebDavDriver implements DriverInterface
 
         $url = $endpoint . '/' . ltrim($fullRemote, '/');
 
-        $body = file_get_contents($localFile);
-        if ($body === false) {
+        // 使用流式 PUT 上传（CURLOPT_INFILE），避免 CURLOPT_POSTFIELDS 的
+        // Expect: 100-continue 问题以及大文件内存消耗问题
+        $fileSize = filesize($localFile);
+        $fh = fopen($localFile, 'rb');
+        if ($fh === false || $fileSize === false) {
+            error_log('[PicUp][WebDAV] upload: 无法打开本地文件 ' . $localFile);
             return false;
         }
 
-        $result = $this->curlRequest('PUT', $url, $body, [
-            'Content-Type' => $mimeType,
-        ], $username, $password);
+        $result = $this->curlPut($url, $fh, $fileSize, $mimeType, $username, $password);
+        fclose($fh);
 
         // 201 Created 或 204 No Content 都是成功
         if ($result['httpCode'] >= 200 && $result['httpCode'] < 300) {
+            self::$lastError = '';
             return $this->getUrl($remotePath);
         }
 
+        $snippet = mb_substr(strip_tags($result['body']), 0, 300);
+        self::$lastError = 'PUT HTTP ' . $result['httpCode'] . '：' . $snippet
+            . '  [URL=' . $url . ']';
+        error_log('[PicUp][WebDAV] upload: PUT 失败，HTTP ' . $result['httpCode']
+            . '，URL=' . $url . '，响应=' . mb_substr($result['body'], 0, 500));
         return false;
+    }
+
+    /**
+     * 使用流式 CURLOPT_INFILE 发送 PUT 请求（专用于文件上传）
+     *
+     * @return array ['httpCode' => int, 'body' => string]
+     */
+    private function curlPut(
+        string $url,
+        $fileHandle,
+        int $fileSize,
+        string $mimeType,
+        string $username,
+        string $password
+    ): array {
+        $ch = curl_init();
+
+        curl_setopt_array($ch, [
+            CURLOPT_URL            => $url,
+            CURLOPT_PUT            => true,
+            CURLOPT_INFILE         => $fileHandle,
+            CURLOPT_INFILESIZE     => $fileSize,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER     => [
+                'Content-Type: ' . $mimeType,
+                'Content-Length: ' . $fileSize,  // 显式设置，避免部分 libcurl 使用分块传输
+                'Expect:',  // 抑制 Expect: 100-continue
+            ],
+            CURLOPT_TIMEOUT        => 120,
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_SSL_VERIFYHOST => false,
+        ]);
+
+        if (!empty($username)) {
+            curl_setopt($ch, CURLOPT_USERPWD, $username . ':' . $password);
+            curl_setopt($ch, CURLOPT_HTTPAUTH, CURLAUTH_BASIC);
+        }
+
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlErr  = curl_error($ch);
+        curl_close($ch);
+
+        if ($curlErr) {
+            error_log('[PicUp][WebDAV] curlPut: cURL 错误 — ' . $curlErr);
+        }
+
+        return [
+            'httpCode' => (int) $httpCode,
+            'body'     => $response ?: '',
+        ];
     }
 
     /**
@@ -224,6 +291,11 @@ class WebDavDriver implements DriverInterface
     ): array {
         $ch = curl_init();
 
+        // 抑制 Expect: 100-continue（许多 WebDAV 服务器不支持）
+        if (!isset($headers['Expect'])) {
+            $headers['Expect'] = '';
+        }
+
         $headerLines = [];
         foreach ($headers as $k => $v) {
             $headerLines[] = $k . ': ' . $v;
@@ -250,7 +322,12 @@ class WebDavDriver implements DriverInterface
 
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlErr  = curl_error($ch);
         curl_close($ch);
+
+        if ($curlErr) {
+            error_log('[PicUp][WebDAV] curlRequest(' . $method . '): cURL 错误 — ' . $curlErr);
+        }
 
         return [
             'httpCode' => (int) $httpCode,
