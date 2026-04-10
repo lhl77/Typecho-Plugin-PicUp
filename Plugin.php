@@ -800,7 +800,7 @@ HTML));
             ],
             'image',
             _t('文件接管范围'),
-            _t('选择「只接管图片」时，PicUp 仅处理图片类型的上传；其他类型文件将交由 Typecho 默认处理器接管（存储到本地服务器）。')
+            _t('选择「只接管图片」时，PicUp 仅处理图片类型的上传；其他类型文件将交由 Typecho 默认处理器接管（存储到本地服务器）。<br/>优先级：<b>后缀自定义方案 > 文件接管范围 > 全局默认方案</b>')
         );
         $form->addInput($mimeScope);
 
@@ -1865,7 +1865,7 @@ HTML;
 </style>
 <div id="ps-list"></div>
 <button type="button" class="ps-add-btn" id="ps-add-btn">+ 添加后缀映射</button>
-<p class="ps-hint">每行指定一组文件后缀（逗号分隔，如 <code>jpg,jpeg,png</code>）及其对应的上传方案。修改实时同步到上方 JSON。</p>
+<p class="ps-hint">每行指定一组文件后缀（逗号分隔，如 <code>jpg,jpeg,png</code>）及其对应的上传方案。修改实时同步到下方 JSON。</p>
 </div>
 <script>
 (function(){
