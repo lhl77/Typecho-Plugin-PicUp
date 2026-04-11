@@ -134,7 +134,22 @@ class GithubDriver implements DriverInterface
             return false;
         }
 
-        $repoPath = ltrim($remotePath, '/');
+        // getStoredPath() 存的是完整 URL，需还原为仓库内路径
+        if (preg_match('#^https?://#i', $remotePath)) {
+            $cdn = rtrim($this->config['cdn'] ?? '', '/');
+            if (!empty($cdn) && strpos($remotePath, $cdn . '/') === 0) {
+                $repoPath = substr($remotePath, strlen($cdn) + 1);
+            } else {
+                $rawBase = 'https://raw.githubusercontent.com/' . trim($repo, '/') . '/' . trim($branch, '/') . '/';
+                if (strpos($remotePath, $rawBase) === 0) {
+                    $repoPath = substr($remotePath, strlen($rawBase));
+                } else {
+                    $repoPath = ltrim(parse_url($remotePath, PHP_URL_PATH) ?: '', '/');
+                }
+            }
+        } else {
+            $repoPath = ltrim($remotePath, '/');
+        }
         $apiUrl   = "https://api.github.com/repos/{$repo}/contents/{$repoPath}";
 
         // 必须先获取文件 SHA 才能删除
@@ -180,8 +195,7 @@ class GithubDriver implements DriverInterface
     /** {@inheritdoc} */
     public function getStoredPath(string $remotePath, string $uploadedUrl): string
     {
-        // upload() 返回的是仓库内路径，直接存储；getUrl() 负责拼接完整 URL
-        return $uploadedUrl;
+        return $this->getUrl($uploadedUrl);
     }
 
     /** {@inheritdoc} */

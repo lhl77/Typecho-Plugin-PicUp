@@ -5,7 +5,7 @@
  *
  * @package PicUp
  * @author LHL
- * @version 1.2.1
+ * @version 1.2.2
  * @link https://github.com/lhl77/Typecho-Plugin-PicUp
  */
 
@@ -408,7 +408,7 @@ class Plugin implements PluginInterface
      *     confirm → resolve(true/false)
      *     prompt  → resolve(string/null)
      *
-     * 优先使用 AdminBeautify.alert / .confirm / .prompt 公开 API（v2.1.36+）；
+     * 优先使用 AdminBeautify.alert / .confirm / .prompt 公开 API（v2.1.37+）；
      * 降级到 _abPendingConfirm / _abPendingPrompt 全局回调（旧版 AB）；
      * 无 AB 时使用浏览器原生同步对话框。
      */
@@ -738,7 +738,7 @@ END_SCRIPT;
       <a href="https://github.com/lhl77/Typecho-Plugin-PicUp" target="_blank">GitHub</a>　|　
       <a href="https://blog.lhl.one/artical/1026.html" target="_blank">使用文档</a>
     </p>
-    <p>版本：v1.2.1</p>
+    <p>版本：v1.2.2</p>
   </div>
   <div class="picup-info-card picup-ab-card">
     <h4>✨ 推荐安装 Admin Beautify<span class="ab-badge">AB-Store</span></h4>
@@ -1315,6 +1315,12 @@ HTML;
         // 不再通过当前驱动的 getUrl() 生成，避免错误地加上当前方案的前缀
         if (preg_match('#^https?://#i', $path)) {
             return $path;
+        }
+
+        // 自定义 URI scheme 格式（nodeimage://id|url、smms://hash|url、zpic://id|url 等）：
+        // 提取 | 后面的真实 URL，不依赖当前激活驱动，避免切换方案后无法解码
+        if (preg_match('#^[a-z][a-z0-9+\-.]+://[^|]+\|(.+)$#i', $path, $m)) {
+            return $m[1];
         }
 
         // 远程相对路径（如 2025/07/abc.jpg）：使用 PicUp 驱动生成访问 URL

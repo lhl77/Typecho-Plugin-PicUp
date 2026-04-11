@@ -155,8 +155,10 @@ class CfimgbedDriver implements DriverInterface
             return false;
         }
 
-        // remotePath 格式: /file/abc123_image.jpg → 删除路径: file/abc123_image.jpg
-        $path    = ltrim($remotePath, '/');
+        // getStoredPath() 存的是完整 URL，需还原为 file/xxx 路径
+        $path = preg_match('#^https?://#i', $remotePath)
+            ? ltrim(parse_url($remotePath, PHP_URL_PATH) ?: '', '/')
+            : ltrim($remotePath, '/');
         $url     = $domain . '/api/manage/delete/' . $path;
 
         $ch = curl_init();
@@ -195,8 +197,10 @@ class CfimgbedDriver implements DriverInterface
     /** {@inheritdoc} */
     public function getStoredPath(string $remotePath, string $uploadedUrl): string
     {
-        // upload() 返回的是 /file/xxx 路径，直接存储；getUrl() 负责拼接域名
-        return $uploadedUrl;
+        // upload() 返回的是 /file/xxx 路径，需拼接部署域名存储为完整 URL，
+        // 避免 attachmentHandle() 将以 / 开头的路径误认为本地路径而拼接博客域名
+        $domain = rtrim($this->config['domain'] ?? '', '/');
+        return $domain . '/' . ltrim($uploadedUrl, '/');
     }
 
     /** {@inheritdoc} */

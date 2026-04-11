@@ -136,7 +136,10 @@ class UpyunDriver implements DriverInterface
             return false;
         }
 
-        $path = '/' . ltrim($remotePath, '/');
+        // getStoredPath() 存的是完整 URL，使用其 URL path 部分（保留前导 /）
+        $path = preg_match('#^https?://#i', $remotePath)
+            ? (parse_url($remotePath, PHP_URL_PATH) ?: '/' . ltrim($remotePath, '/'))
+            : '/' . ltrim($remotePath, '/');
         $uri  = "/{$service}{$path}";
         $url  = 'https://v0.api.upyun.com' . $uri;
         $date = gmdate('D, d M Y H:i:s \G\M\T');
@@ -173,7 +176,10 @@ class UpyunDriver implements DriverInterface
     /** {@inheritdoc} */
     public function getStoredPath(string $remotePath, string $uploadedUrl): string
     {
-        return $uploadedUrl;
+        // upload() 返回的路径可能以 / 开头，需拼接 urlPrefix 存储为完整 URL，
+        // 避免 attachmentHandle() 将以 / 开头的路径误认为本地路径而拼接博客域名
+        $urlPrefix = rtrim($this->config['urlPrefix'] ?? '', '/');
+        return $urlPrefix . '/' . ltrim($uploadedUrl, '/');
     }
 
     /** {@inheritdoc} */

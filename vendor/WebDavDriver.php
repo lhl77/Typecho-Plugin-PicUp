@@ -206,7 +206,16 @@ class WebDavDriver implements DriverInterface
             return false;
         }
 
-        $fullRemote = $basePath . '/' . ltrim($remotePath, '/');
+        // getStoredPath() 现在存的是完整 URL，需还原为相对路径
+        $relPath = $remotePath;
+        if (preg_match('#^https?://#i', $remotePath)) {
+            $urlPrefix = rtrim($this->config['urlPrefix'] ?? '', '/');
+            if ($urlPrefix !== '' && strpos($remotePath, $urlPrefix) === 0) {
+                $relPath = substr($remotePath, strlen($urlPrefix));
+            }
+        }
+
+        $fullRemote = $basePath . '/' . ltrim($relPath, '/');
         $url = $endpoint . '/' . ltrim($fullRemote, '/');
 
         $result = $this->curlRequest('DELETE', $url, null, [], $username, $password);
@@ -229,11 +238,11 @@ class WebDavDriver implements DriverInterface
 
     /**
      * {@inheritdoc}
-     * WebDAV 存储 remotePath（相对路径），URL 在 getUrl() 中拼接前缀。
+     * 存储为完整 URL，避免切换方案后 attachmentHandle() 用错驱动的 urlPrefix。
      */
     public function getStoredPath(string $remotePath, string $uploadedUrl): string
     {
-        return $remotePath;
+        return $uploadedUrl;
     }
 
     /**

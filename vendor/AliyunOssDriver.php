@@ -144,7 +144,10 @@ class AliyunOssDriver implements DriverInterface
             return false;
         }
 
-        $key      = ltrim($remotePath, '/');
+        // getStoredPath() 存的是完整 URL，需还原为 key
+        $key = preg_match('#^https?://#i', $remotePath)
+            ? rawurldecode(ltrim(parse_url($remotePath, PHP_URL_PATH) ?: '', '/'))
+            : ltrim($remotePath, '/');
         $url      = "https://{$bucket}.{$endpoint}/{$key}";
         $date     = gmdate('D, d M Y H:i:s \G\M\T');
         $resource = '/' . $bucket . '/' . $key;
@@ -190,8 +193,7 @@ class AliyunOssDriver implements DriverInterface
     /** {@inheritdoc} */
     public function getStoredPath(string $remotePath, string $uploadedUrl): string
     {
-        // upload() 返回的是 key（相对路径），直接存储
-        return $uploadedUrl;
+        return $this->getUrl($uploadedUrl);
     }
 
     /** {@inheritdoc} */

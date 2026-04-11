@@ -165,9 +165,25 @@ class S3Driver implements DriverInterface
             return false;
         }
 
-        $objectKey = ltrim($remotePath, '/');
-        if (!empty($prefix)) {
-            $objectKey = $prefix . '/' . $objectKey;
+        // getStoredPath() 存的是完整 URL，需还原为 objectKey（已含 prefix）
+        if (preg_match('#^https?://#i', $remotePath)) {
+            $urlPrefix = rtrim($this->config['urlPrefix'] ?? '', '/');
+            if (!empty($urlPrefix) && strpos($remotePath, $urlPrefix . '/') === 0) {
+                $objectKey = substr($remotePath, strlen($urlPrefix) + 1);
+            } else {
+                $path = rawurldecode(ltrim(parse_url($remotePath, PHP_URL_PATH) ?: '', '/'));
+                // path-style URL 含 bucket 前缀，需剥离
+                if (!empty($bucket) && strpos($path, $bucket . '/') === 0) {
+                    $objectKey = substr($path, strlen($bucket) + 1);
+                } else {
+                    $objectKey = $path;
+                }
+            }
+        } else {
+            $objectKey = ltrim($remotePath, '/');
+            if (!empty($prefix)) {
+                $objectKey = $prefix . '/' . $objectKey;
+            }
         }
 
         $url = $this->buildUrl($endpoint, $bucket, $objectKey);
@@ -210,11 +226,11 @@ class S3Driver implements DriverInterface
 
     /**
      * {@inheritdoc}
-     * S3 存储 remotePath（相对路径），URL 在 getUrl() 中动态拼接。
+     * upload() 已返回完整 URL，直接存储，避免切换方案后 attachmentHandle() 用错驱动前缀。
      */
     public function getStoredPath(string $remotePath, string $uploadedUrl): string
     {
-        return $remotePath;
+        return $uploadedUrl;
     }
 
     /**

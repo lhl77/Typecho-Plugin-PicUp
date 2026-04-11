@@ -156,7 +156,10 @@ class QiniuKodoDriver implements DriverInterface
             return false;
         }
 
-        $key         = ltrim($remotePath, '/');
+        // getStoredPath() 存的是完整 URL，需还原为 key
+        $key = preg_match('#^https?://#i', $remotePath)
+            ? rawurldecode(ltrim(parse_url($remotePath, PHP_URL_PATH) ?: '', '/'))
+            : ltrim($remotePath, '/');
         $entryCoded  = $this->base64UrlSafe($bucket . ':' . $key);
         $path        = '/rs/delete/' . $entryCoded;
         $accessToken = $this->buildQBoxToken($accessKey, $secretKey, $path);
@@ -193,7 +196,7 @@ class QiniuKodoDriver implements DriverInterface
     /** {@inheritdoc} */
     public function getStoredPath(string $remotePath, string $uploadedUrl): string
     {
-        return $uploadedUrl;
+        return $this->getUrl($uploadedUrl);
     }
 
     /** {@inheritdoc} */
