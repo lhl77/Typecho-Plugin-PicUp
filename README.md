@@ -12,22 +12,20 @@
 
 </div>
 
----
-## [截图、插件开发指南、SDK接入指南](https://blog.lhl.one/artical/1026.html)
----
-
-## ✨ 功能特性
-
-- 🗂️ **多存储后端** — 支持 12+ 种云存储 / 图床，可随时切换
-- 📦 **多 Profile 配置** — 同时保存多套配置方案，一键应用切换
-- 🖼️ **图像处理扩展** — 图片压缩、自动转 WebP、添加水印，可逐个开关
-- 🔌 **扩展化架构** — 驱动和扩展均自动发现，放入对应目录即生效
-- 📱 **响应式配置界面** — 移动端友好，支持深色模式
-- ⚡ **上传进度提示** — Toast 通知，实时展示上传状态
+[文档](https://blog.lhl.one/artical/1026.html)
 
 ---
 
-## 📦 支持的存储驱动
+## 功能特性
+
+- **多存储后端** — 支持 12+ 种云存储 / 图床，可随时切换
+- **多 Profile 配置** — 同时保存多套配置方案，一键应用切换
+- **图像处理扩展** — 图片压缩、自动转 WebP、添加水印，可逐个开关
+- **扩展化架构** — 驱动和扩展均自动发现，放入对应目录即生效
+- **响应式配置界面** — 移动端友好，支持深色模式
+- **上传进度提示** — Toast 通知，实时展示上传状态
+
+## 支持的存储驱动
 
 | 驱动 | 标识 | 说明 |
 |------|------|------|
@@ -52,7 +50,7 @@
 
 ---
 
-## 🖼️ 图像处理扩展
+## 图像处理扩展
 
 扩展存放于 `extensions/` 目录，每个方案（Profile）可独立配置开启/关闭。
 
@@ -66,7 +64,7 @@
 
 ---
 
-## �️ 服务器要求
+## 服务器要求
 
 | 项目 | 最低要求 | 说明 |
 |------|---------|------|
@@ -74,30 +72,8 @@
 | Typecho | 1.3.0+ | 需命名空间版本 |
 | OpenSSL | **1.1.0+** | 低于此版本可能导致连接 Cloudflare 等服务失败 |
 
-### ⚠️ OpenSSL 版本过低导致上传失败
 
-**症状**：上传到 NodeImage、Imgur 等通过 Cloudflare 保护的图床时，报错 `SSL routines:SSL23_GET_SERVER_HELLO:tlsv1 alert protocol version`（cURL 错误码 35）。
-
-**原因**：OpenSSL 1.0.x 默认使用 TLS 1.0/1.1 握手，Cloudflare 已强制要求 **TLS 1.2 最低版本**，握手被拒绝。
-
-**插件已内置临时修复**（强制指定 `CURLOPT_SSLVERSION = TLSv1_2`），但仍建议从根本上解决：
-
-```bash
-# CentOS / RHEL（宝塔服务器）
-yum update openssl
-
-# Debian / Ubuntu
-apt upgrade openssl
-
-# 升级后重启 php-fpm（宝塔面板可在软件商店直接升级 PHP 版本）
-systemctl restart php-fpm
-```
-
-设置页面会在检测到 OpenSSL < 1.1.0 时自动显示警告横幅。
-
----
-
-## �🚀 安装
+## 安装
 
 ### 方式一：AB-Store 一键安装（推荐）
 
@@ -116,26 +92,6 @@ systemctl restart php-fpm
 cd /path/to/typecho/usr/plugins/
 git clone https://github.com/lhl77/Typecho-Plugin-PicUp.git PicUp
 ```
-
----
-
-## ⚙️ 配置
-
-启用插件后，进入 **控制台 → 插件管理 → PicUp → 设置**。
-
-### 配置编辑器
-
-配置界面提供可视化编辑器，支持：
-
-- **添加方案** — 创建新的配置 Profile
-- **重命名方案** — 修改方案名称
-- **应用此方案** — 将当前方案设为活跃方案
-- **删除方案** — 删除当前方案
-
-每个方案包含：
-1. **驱动类型** — 选择存储后端
-2. **驱动配置** — 各驱动专属配置字段
-3. **插件扩展** — 为该方案独立配置图像处理扩展
 
 ### JSON 配置示例
 
@@ -160,7 +116,7 @@ git clone https://github.com/lhl77/Typecho-Plugin-PicUp.git PicUp
 
 ---
 
-## 🔧 驱动配置说明
+## 驱动配置说明
 
 <details>
 <summary><b>本地存储</b></summary>
@@ -406,9 +362,7 @@ git clone https://github.com/lhl77/Typecho-Plugin-PicUp.git PicUp
 
 > **中文水印**：需要提供含 CJK 字符的 TTF/OTF 字体文件（如 `NotoSansCJK-Regular.ttc`），或系统已安装常见中文字体（插件会自动检测）。
 
----
-
-## 📁 目录结构
+## 目录结构
 
 ```
 PicUp/
@@ -441,8 +395,6 @@ PicUp/
     └── WatermarkExtension.php      # 添加水印
 ```
 
----
-
-## 🤝 贡献
+## 贡献
 
 欢迎提交 [Issue](https://github.com/lhl77/Typecho-Plugin-PicUp/issues) 或 [Pull Request](https://github.com/lhl77/Typecho-Plugin-PicUp/pulls)。
