@@ -2,7 +2,7 @@
 
 # PicUp for Typecho
 
-**多存储后端图片/附件上传插件，支持多种云存储服务，多 Profile 配置，图像处理扩展。**
+**A multi-backend image & attachment upload plugin for Typecho — supports 18+ cloud storage services, multiple profiles, and server-side image processing.**
 
 [![PHP](https://img.shields.io/badge/PHP-%3E%3D7.4-777bb3?logo=php&logoColor=white)](https://www.php.net/)
 [![Typecho](https://img.shields.io/badge/Typecho-1.3.0%2B-4a90d9)](https://typecho.org/)
@@ -12,88 +12,107 @@
 
 </div>
 
-[文档](https://blog.lhl.one/artical/1026.html)
+<p align="center">
+  <a href="https://blog.lhl.one/artical/1026.html">中文文档</a> ·
+  <a href="https://github.com/lhl77/Typecho-Plugin-PicUp/releases">Releases</a> ·
+  <a href="https://github.com/lhl77/Typecho-Plugin-PicUp/issues">Bug Reports</a>
+</p>
 
 ---
 
-## 功能特性
+## Features
 
-- **多存储后端** — 支持 12+ 种云存储 / 图床，可随时切换
-- **多 Profile 配置** — 同时保存多套配置方案，一键应用切换
-- **图像处理扩展** — 图片压缩、自动转 WebP、添加水印，可逐个开关
-- **扩展化架构** — 驱动和扩展均自动发现，放入对应目录即生效
-- **响应式配置界面** — 移动端友好，支持深色模式
-- **上传进度提示** — Toast 通知，实时展示上传状态
-
-## 支持的存储驱动
-
-| 驱动 | 标识 | 说明 |
-|------|------|------|
-| **本地存储** | `local` | 遵循 Typecho 原生逻辑，存储至 `usr/uploads/` |
-| **Lsky Pro 兰空图床** | `lsky` | 支持 v1 / v2 API |
-| **AWS S3 / 兼容** | `s3` | 支持 AWS S3、MinIO、Cloudflare R2、阿里云 OSS（S3 兼容）等 |
-| **WebDAV** | `webdav` | 标准 WebDAV 协议 |
-| **GitHub 仓库** | `github` | 通过 GitHub Contents API 存储，支持 CDN 加速 |
-| **S.EE (SM.MS)** | `smms` | S.EE 免费图床 |
-| **阿里云 OSS** | `aliyunoss` | 阿里云对象存储（原生 V1 签名） |
-| **腾讯云 COS** | `tencentcos` | 腾讯云对象存储（COS V5 签名） |
-| **七牛云 KODO** | `qiniukodo` | 七牛云对象存储 |
-| **又拍云 USS** | `upyun` | 又拍云云存储 |
-| **EasyImage 简单图床** | `easyimage` | EasyImage 自建图床 |
-| **CloudFlare ImgBed** | `cfimgbed` | 基于 Cloudflare Workers 的图床 |
-| **NodeImage** | `nodeimage` | NodeImage 图床，通过 X-API-Key 认证 |
-| **Chevereto V4** | `cheveretoV4` | Chevereto V4 自建图床，支持相册 |
-| **Imgur** | `imgur` | Imgur 图床，支持匿名/账户上传 |
-| **初春图床 (OneImg)** | `oneimg` | 初春图床，Bearer Token 认证 |
-| **Telegram 图床** | `tgimagebed` | tg-imagebed 项目，支持匿名和 Token 上传 |
-| **Zpic 图床** | `zpic` | Zpic / ImgURL Pro，支持 V2/V3 API |
+| Feature | Description |
+| ------- | ----------- |
+| **18+ Storage Backends** | Switch between cloud storage services and image hosts at any time |
+| **Multiple Profiles** | Save and switch between multiple configuration sets with one click |
+| **Image Processing** | Server-side compression, WebP conversion, and watermarking — toggle per profile |
+| **Extensible Architecture** | Drivers and extensions are auto-discovered; drop a file into the right directory and it works |
+| **Responsive Config UI** | Mobile-friendly settings panel with dark mode support |
+| **Upload Progress Toast** | Real-time toast notifications showing upload status |
 
 ---
 
-## 图像处理扩展
+## Storage Drivers
 
-扩展存放于 `extensions/` 目录，每个方案（Profile）可独立配置开启/关闭。
-
-| 扩展 | 标识 | 依赖 | 说明 |
-|------|------|------|------|
-| **图片压缩** | `compress` | PHP `gd` 扩展 | 对 JPEG/PNG/WebP 进行有损/无损压缩，可设置质量百分比 |
-| **自动转 WebP** | `webp` | PHP `gd` + WebP 支持 | 上传前将 JPEG/PNG/GIF/BMP 转换为 WebP 格式 |
-| **添加水印** | `watermark` | PHP `gd` 扩展 | 支持文字水印（TTF 字体）和图片水印，可设置位置/透明度 |
-
-> **提示**：扩展会在文件上传至云存储前在服务端处理，原文件不会被修改。
+| Driver | ID | Description |
+| ------ | -- | ----------- |
+| **Local** | `local` | Follows Typecho's native logic, stores to `usr/uploads/` |
+| **Lsky Pro** | `lsky` | Supports v1 / v2 API |
+| **AWS S3 / Compatible** | `s3` | AWS S3, MinIO, Cloudflare R2, Alibaba Cloud OSS (S3-compatible), etc. |
+| **WebDAV** | `webdav` | Standard WebDAV protocol |
+| **GitHub Repository** | `github` | Stores via GitHub Contents API, supports CDN acceleration |
+| **S.EE (SM.MS)** | `smms` | S.EE free image host |
+| **Alibaba Cloud OSS** | `aliyunoss` | Alibaba Cloud Object Storage Service (native V1 signature) |
+| **Tencent Cloud COS** | `tencentcos` | Tencent Cloud Object Storage (COS V5 signature) |
+| **Qiniu Cloud KODO** | `qiniukodo` | Qiniu Cloud object storage |
+| **Upyun USS** | `upyun` | Upyun cloud storage |
+| **EasyImage** | `easyimage` | Self-hosted EasyImage |
+| **Cloudflare ImgBed** | `cfimgbed` | Image host based on Cloudflare Workers |
+| **NodeImage** | `nodeimage` | NodeImage host, authenticated via `X-API-Key` |
+| **Chevereto V4** | `cheveretoV4` | Self-hosted Chevereto V4, supports albums |
+| **Imgur** | `imgur` | Supports anonymous and account-based uploads |
+| **OneImg** | `oneimg` | Bearer Token authentication |
+| **Telegram ImgBed** | `tgimagebed` | tg-imagebed project, supports anonymous and token uploads |
+| **Zpic** | `zpic` | Zpic / ImgURL Pro, supports V2/V3 API |
 
 ---
 
-## 服务器要求
+## Image Processing Extensions
 
-| 项目 | 最低要求 | 说明 |
-|------|---------|------|
-| PHP | 7.4+ | 推荐 8.0+，需开启 `curl`、`json`、`fileinfo` 扩展 |
-| Typecho | 1.3.0+ | 需命名空间版本 |
-| OpenSSL | **1.1.0+** | 低于此版本可能导致连接 Cloudflare 等服务失败 |
+Extensions live in the `extensions/` directory and can be enabled or disabled independently per profile.
 
+| Extension | ID | Requires | Description |
+| --------- | -- | -------- | ----------- |
+| **Compression** | `compress` | PHP `gd` | Lossy/lossless compression for JPEG/PNG/WebP with configurable quality |
+| **WebP Conversion** | `webp` | PHP `gd` + WebP support | Converts JPEG/PNG/GIF/BMP to WebP before upload |
+| **Watermark** | `watermark` | PHP `gd` | Text watermark (TTF font) or image watermark with position and opacity control |
 
-## 安装
+> **Note:** Extensions process files server-side before they are sent to cloud storage. The original file is never modified.
 
-### 方式一：AB-Store 一键安装（推荐）
+---
 
-安装 [AdminBeautify](https://github.com/lhl77/Typecho-Plugin-AdminBeautify) 插件后，进入后台 **AB-Store** 应用商店，搜索 **PicUp** 即可一键安装并获取后续更新。
+## Requirements
 
-### 方式二：手动安装
+| Item | Minimum | Notes |
+| ---- | ------- | ----- |
+| PHP | 7.4+ | 8.0+ recommended; `curl`, `json`, and `fileinfo` extensions required |
+| Typecho | 1.3.0+ | Namespace-based version required |
+| OpenSSL | **1.1.0+** | Older versions may cause TLS handshake failures with Cloudflare and similar services |
 
-1. 下载最新 [Release](https://github.com/lhl77/Typecho-Plugin-PicUp/releases) 压缩包
-2. 解压为 `PicUp` 文件夹
-3. 上传至 Typecho 的 `usr/plugins/` 目录
-4. 登录后台 → **控制台** → **插件管理** → 启用 **PicUp**
+---
 
-### 方式三：Git 克隆
+## Installation
+
+### Option 1 — AB-Store (Recommended)
+
+Install the [AdminBeautify](https://github.com/lhl77/Typecho-Plugin-AdminBeautify) plugin, then open **AB-Store** in the admin panel, search for **PicUp**, and install with one click. Updates are delivered the same way.
+
+### Option 2 — Manual
+
+1. Download the latest ZIP from [GitHub Releases](https://github.com/lhl77/Typecho-Plugin-PicUp/releases)
+2. Extract the archive and rename the folder to `PicUp`
+3. Upload it to `usr/plugins/` in your Typecho installation
+4. Go to **Admin** → **Console** → **Plugins** → enable **PicUp**
+
+### Option 3 — Git Clone
 
 ```bash
 cd /path/to/typecho/usr/plugins/
 git clone https://github.com/lhl77/Typecho-Plugin-PicUp.git PicUp
 ```
 
-### JSON 配置示例
+---
+
+## Setup
+
+### 1. Configure a Profile
+
+After activating the plugin, go to **Admin** → **Settings** → **PicUp**.
+
+Profiles are stored as JSON. Each top-level key is a profile name. Choose a driver with `"driver"` and fill in the required fields for that driver. Add a `"_extensions"` block to configure image processing per profile.
+
+**Example — Alibaba Cloud OSS with compression and WebP:**
 
 ```json
 {
@@ -101,215 +120,223 @@ git clone https://github.com/lhl77/Typecho-Plugin-PicUp.git PicUp
     "driver": "aliyunoss",
     "endpoint": "oss-cn-hangzhou.aliyuncs.com",
     "bucket": "my-bucket",
-    "accessKeyId": "xxx",
-    "accessKeySecret": "xxx",
+    "accessKeyId": "YOUR_KEY_ID",
+    "accessKeySecret": "YOUR_KEY_SECRET",
     "prefix": "images",
     "urlPrefix": "https://cdn.example.com",
     "_extensions": {
       "compress": { "enabled": true, "quality": "82" },
-      "webp": { "enabled": true, "quality": "85" },
+      "webp":     { "enabled": true, "quality": "85" },
       "watermark": { "enabled": false }
     }
   }
 }
 ```
 
+> **Keep your credentials private.** Never commit your JSON config to a public repository.
+
+### 2. Select the Active Profile
+
+After saving, pick the profile you want to activate from the dropdown and save again. All subsequent uploads will use that profile.
+
 ---
 
-## 驱动配置说明
+## Driver Reference
 
 <details>
-<summary><b>本地存储</b></summary>
+<summary><b>Local Storage</b></summary>
 
-| 字段 | 说明 | 示例 |
-|------|------|------|
-| `uploadDir` | 相对于 Typecho 根目录的上传目录 | `usr/uploads` |
-| `urlPrefix` | 文件 URL 前缀，留空自动使用站点地址 | `https://example.com` |
+| Field | Description | Example |
+| ----- | ----------- | ------- |
+| `uploadDir` | Upload directory relative to the Typecho root | `usr/uploads` |
+| `urlPrefix` | File URL prefix; leave blank to use the site URL automatically | `https://example.com` |
 
 </details>
 
 <details>
-<summary><b>Lsky Pro 兰空图床</b></summary>
+<summary><b>Lsky Pro</b></summary>
 
-| 字段 | 说明 |
-|------|------|
-| `server` | 图床地址，如 `https://pic.example.com` |
-| `token` | API Token（不含 Bearer 前缀） |
-| `strategy_id` | 储存策略 ID（可选） |
-| `album_id` | 相册 ID（可选） |
-| `api_version` | API 版本：`v1` 或 `v2` |
+| Field | Description |
+| ----- | ----------- |
+| `server` | Host URL, e.g. `https://pic.example.com` |
+| `token` | API Token (without the `Bearer` prefix) |
+| `strategy_id` | Storage strategy ID (optional) |
+| `album_id` | Album ID (optional) |
+| `api_version` | API version: `v1` or `v2` |
 
 </details>
 
 <details>
-<summary><b>阿里云 OSS</b></summary>
+<summary><b>Alibaba Cloud OSS</b></summary>
 
-| 字段 | 说明 | 示例 |
-|------|------|------|
-| `endpoint` | 地域节点 | `oss-cn-hangzhou.aliyuncs.com` |
-| `bucket` | Bucket 名称 | `my-bucket` |
+| Field | Description | Example |
+| ----- | ----------- | ------- |
+| `endpoint` | Region endpoint | `oss-cn-hangzhou.aliyuncs.com` |
+| `bucket` | Bucket name | `my-bucket` |
 | `accessKeyId` | Access Key ID | |
 | `accessKeySecret` | Access Key Secret | |
-| `prefix` | 文件路径前缀（可选） | `images` |
-| `urlPrefix` | 自定义 CDN 域名（可选） | `https://cdn.example.com` |
+| `prefix` | Path prefix (optional) | `images` |
+| `urlPrefix` | Custom CDN domain (optional) | `https://cdn.example.com` |
 
 </details>
 
 <details>
-<summary><b>腾讯云 COS</b></summary>
+<summary><b>Tencent Cloud COS</b></summary>
 
-| 字段 | 说明 | 示例 |
-|------|------|------|
-| `region` | 地域 | `ap-guangzhou` |
-| `bucket` | Bucket（含 AppId） | `my-bucket-1250000000` |
+| Field | Description | Example |
+| ----- | ----------- | ------- |
+| `region` | Region | `ap-guangzhou` |
+| `bucket` | Bucket name including AppId | `my-bucket-1250000000` |
 | `secretId` | SecretId | |
 | `secretKey` | SecretKey | |
-| `prefix` | 路径前缀（可选） | `images` |
-| `urlPrefix` | 自定义域名（可选） | `https://cdn.example.com` |
+| `prefix` | Path prefix (optional) | `images` |
+| `urlPrefix` | Custom domain (optional) | `https://cdn.example.com` |
 
 </details>
 
 <details>
-<summary><b>七牛云 KODO</b></summary>
+<summary><b>Qiniu Cloud KODO</b></summary>
 
-| 字段 | 说明 |
-|------|------|
+| Field | Description |
+| ----- | ----------- |
 | `accessKey` | Access Key |
 | `secretKey` | Secret Key |
-| `bucket` | Bucket 名称 |
-| `zone` | 存储区域（z0=华东, z1=华北, z2=华南, na0=北美, as0=东南亚） |
-| `urlPrefix` | 绑定的自定义域名（**必填**，七牛不提供免费测试域名） |
-| `prefix` | 路径前缀（可选） |
+| `bucket` | Bucket name |
+| `zone` | Storage zone (`z0`=East China, `z1`=North China, `z2`=South China, `na0`=North America, `as0`=Southeast Asia) |
+| `urlPrefix` | Bound custom domain (**required** — Qiniu does not provide free test domains) |
+| `prefix` | Path prefix (optional) |
 
 </details>
 
 <details>
-<summary><b>又拍云 USS</b></summary>
+<summary><b>Upyun USS</b></summary>
 
-| 字段 | 说明 |
-|------|------|
-| `service` | 服务名（Bucket） |
-| `operator` | 操作员账号 |
-| `password` | 操作员密码 |
-| `urlPrefix` | 绑定的自定义域名 |
-| `prefix` | 路径前缀（可选） |
-
-</details>
-
-<details>
-<summary><b>GitHub 仓库</b></summary>
-
-| 字段 | 说明 | 示例 |
-|------|------|------|
-| `token` | Personal Access Token（需 `repo` 权限） | |
-| `repo` | 仓库名（`owner/repo`） | `lhl77/images` |
-| `branch` | 分支 | `main` |
-| `prefix` | 路径前缀（可选） | `images` |
-| `cdn` | CDN 加速地址（可选） | `https://cdn.jsdelivr.net/gh/lhl77/images` |
+| Field | Description |
+| ----- | ----------- |
+| `service` | Service (bucket) name |
+| `operator` | Operator account |
+| `password` | Operator password |
+| `urlPrefix` | Bound custom domain |
+| `prefix` | Path prefix (optional) |
 
 </details>
 
 <details>
-<summary><b>S3 兼容（AWS S3 / MinIO / R2 等）</b></summary>
+<summary><b>GitHub Repository</b></summary>
 
-| 字段 | 说明 |
-|------|------|
-| `endpoint` | 端点地址 |
-| `region` | 地域 |
-| `bucket` | Bucket 名称 |
+| Field | Description | Example |
+| ----- | ----------- | ------- |
+| `token` | Personal Access Token with `repo` scope | |
+| `repo` | Repository (`owner/repo`) | `lhl77/images` |
+| `branch` | Branch | `main` |
+| `prefix` | Path prefix (optional) | `images` |
+| `cdn` | CDN acceleration URL (optional) | `https://cdn.jsdelivr.net/gh/lhl77/images` |
+
+</details>
+
+<details>
+<summary><b>S3-Compatible (AWS S3 / MinIO / R2 / etc.)</b></summary>
+
+| Field | Description |
+| ----- | ----------- |
+| `endpoint` | Endpoint URL |
+| `region` | Region |
+| `bucket` | Bucket name |
 | `accessKey` | Access Key |
 | `secretKey` | Secret Key |
-| `pathStyle` | 路径风格（MinIO 需开启） |
-| `urlPrefix` | 自定义域名（可选） |
-| `prefix` | 路径前缀（可选） |
+| `pathStyle` | Use path-style URLs (required for MinIO) |
+| `urlPrefix` | Custom domain (optional) |
+| `prefix` | Path prefix (optional) |
 
 </details>
 
 <details>
 <summary><b>WebDAV</b></summary>
 
-| 字段 | 说明 | 示例 |
-|------|------|------|
-| `server` | WebDAV 服务器地址 | `https://dav.example.com/path` |
-| `username` | 用户名 | |
-| `password` | 密码 | |
-| `urlPrefix` | 文件公开访问域名 | `https://cdn.example.com` |
-| `prefix` | 路径前缀（可选） | `images` |
+| Field | Description | Example |
+| ----- | ----------- | ------- |
+| `server` | WebDAV server URL | `https://dav.example.com/path` |
+| `username` | Username | |
+| `password` | Password | |
+| `urlPrefix` | Public-facing domain for file URLs | `https://cdn.example.com` |
+| `prefix` | Path prefix (optional) | `images` |
 
 </details>
 
 <details>
 <summary><b>NodeImage</b></summary>
 
-| 字段 | 说明 |
-|------|------|
-| `api_key` | 在 NodeImage 后台获取的 API Key（通过 `X-API-Key` 请求头传递） |
+| Field | Description |
+| ----- | ----------- |
+| `api_key` | API Key obtained from the NodeImage admin panel (sent as `X-API-Key` header) |
 
-> **注意**：NodeImage 使用 Cloudflare 作为 CDN，服务器 OpenSSL 须 ≥ 1.1.0，否则 TLS 握手会被拒绝。
+> **Note:** NodeImage uses Cloudflare as its CDN. Your server's OpenSSL must be ≥ 1.1.0, otherwise the TLS handshake will be rejected.
 
 </details>
 
 <details>
 <summary><b>Chevereto V4</b></summary>
 
-| 字段 | 说明 |
-|------|------|
-| `server` | Chevereto V4 站点地址，如 `https://pic.example.com` |
-| `api_key` | 在 Chevereto 后台「Dashboard → API」中获取的 API v1 Key |
-| `album_id` | 相册 ID（可选），上传至指定相册 |
+| Field | Description |
+| ----- | ----------- |
+| `server` | Chevereto V4 site URL, e.g. `https://pic.example.com` |
+| `api_key` | API v1 Key from **Dashboard → API** in Chevereto admin |
+| `album_id` | Album ID (optional) |
 
 </details>
 
 <details>
 <summary><b>Imgur</b></summary>
 
-| 字段 | 说明 |
-|------|------|
-| `client_id` | 在 [Imgur API](https://api.imgur.com/oauth2/addclient) 注册应用后获取的 Client ID |
-| `access_token` | Access Token（可选），填写后上传到账户，留空则匿名上传 |
-| `album_hash` | 相册 deletehash（可选），需配合 Access Token 使用 |
-| `cdn` | CDN 替换域名（可选），将 `https://i.imgur.com` 替换为自定义域名 |
+| Field | Description |
+| ----- | ----------- |
+| `client_id` | Client ID obtained from [Imgur API](https://api.imgur.com/oauth2/addclient) |
+| `access_token` | Access Token (optional) — omit for anonymous uploads |
+| `album_hash` | Album deletehash (optional, requires `access_token`) |
+| `cdn` | CDN replacement domain (optional) — replaces `https://i.imgur.com` |
 
 </details>
 
 <details>
-<summary><b>初春图床 (OneImg)</b></summary>
+<summary><b>OneImg</b></summary>
 
-| 字段 | 说明 |
-|------|------|
-| `server` | 图床站点地址，如 `https://img.example.com` |
+| Field | Description |
+| ----- | ----------- |
+| `server` | Host URL, e.g. `https://img.example.com` |
 | `token` | Bearer Token |
-| `bucket_id` | 存储桶 ID（可选） |
-| `url_prefix` | URL 前缀（可选），图床返回相对路径时拼接为完整 URL |
+| `bucket_id` | Bucket ID (optional) |
+| `url_prefix` | URL prefix (optional) — prepended when the host returns a relative path |
 
 </details>
 
 <details>
-<summary><b>Telegram 图床 (tg-imagebed)</b></summary>
+<summary><b>Telegram ImgBed (tg-imagebed)</b></summary>
 
-| 字段 | 说明 |
-|------|------|
-| `server` | 图床站点地址，如 `https://img.example.com` |
-| `token` | Token（可选），填写后使用认证上传（更高限额），留空则匿名上传 |
+| Field | Description |
+| ----- | ----------- |
+| `server` | Host URL, e.g. `https://img.example.com` |
+| `token` | Token (optional) — omit for anonymous uploads with lower rate limits |
 
 </details>
 
 <details>
-<summary><b>Zpic 图床</b></summary>
+<summary><b>Zpic</b></summary>
 
-| 字段 | 说明 |
-|------|------|
-| `server` | 图床域名，如 `https://zpic.example.com` |
-| `api_version` | API 版本：`v3`（Bearer Token，推荐）或 `v2`（uid + token，兼容 ImgURL Pro） |
-| `token` | V3 的 Token（格式 `sk-xxx`）或 V2 的 Token |
-| `uid` | UID（仅 V2 需要） |
-| `album_id` | 相册 ID（可选） |
+| Field | Description |
+| ----- | ----------- |
+| `server` | Host domain, e.g. `https://zpic.example.com` |
+| `api_version` | API version: `v3` (Bearer Token, recommended) or `v2` (uid + token, ImgURL Pro compatible) |
+| `token` | V3 token (format `sk-xxx`) or V2 token |
+| `uid` | UID (V2 only) |
+| `album_id` | Album ID (optional) |
 
 </details>
 
 ---
 
-### 图片压缩
+## Image Processing Reference
+
+### Compression
 
 ```json
 "compress": {
@@ -318,9 +345,9 @@ git clone https://github.com/lhl77/Typecho-Plugin-PicUp.git PicUp
 }
 ```
 
-- `quality`：1–100，JPEG/WebP 为有损质量，PNG 为压缩级别换算（`(100-quality)/10`）
+`quality` is 1–100. For JPEG/WebP it maps directly to lossy quality; for PNG it maps to compression level as `(100 - quality) / 10`.
 
-### 自动转 WebP
+### WebP Conversion
 
 ```json
 "webp": {
@@ -329,9 +356,9 @@ git clone https://github.com/lhl77/Typecho-Plugin-PicUp.git PicUp
 }
 ```
 
-> 启用后，JPEG/PNG/GIF 上传时会自动转为 `.webp` 格式。服务端需要 PHP GD 扩展并编译了 WebP 支持（`--with-webp`）。
+When enabled, JPEG/PNG/GIF files are converted to `.webp` before upload. Requires PHP GD compiled with WebP support (`--with-webp`).
 
-### 添加水印
+### Watermark
 
 ```json
 "watermark": {
@@ -348,53 +375,34 @@ git clone https://github.com/lhl77/Typecho-Plugin-PicUp.git PicUp
 }
 ```
 
-| 字段 | 说明 |
-|------|------|
-| `type` | `text`（文字水印）或 `image`（图片水印） |
-| `text` | 水印文字内容 |
-| `font_size` | 字体大小（像素） |
-| `font_color` | 字体颜色（十六进制） |
-| `opacity` | 透明度 0–100 |
-| `position` | 位置：`top-left`/`top-right`/`bottom-left`/`bottom-right`/`center` |
-| `font_path` | TTF 字体文件路径（支持中文水印需提供含 CJK 字符的字体） |
-| `image_path` | 水印图片路径（`type=image` 时有效） |
-| `image_scale` | 水印图片占原图宽度的百分比 |
+| Field | Description |
+| ----- | ----------- |
+| `type` | `text` (text watermark) or `image` (image watermark) |
+| `text` | Watermark text content |
+| `font_size` | Font size in pixels |
+| `font_color` | Font color in hex |
+| `opacity` | Opacity 0–100 |
+| `position` | `top-left` / `top-right` / `bottom-left` / `bottom-right` / `center` |
+| `font_path` | Path to a TTF font file (required for CJK characters) |
+| `image_path` | Path to the watermark image (`type=image` only) |
+| `image_scale` | Watermark image width as a percentage of the original image width |
 
-> **中文水印**：需要提供含 CJK 字符的 TTF/OTF 字体文件（如 `NotoSansCJK-Regular.ttc`），或系统已安装常见中文字体（插件会自动检测）。
+> The plugin bundles Noto Sans for text watermarks. For CJK text watermarks, provide a TTF/OTF font containing CJK characters (e.g. `NotoSansCJK-Regular.ttc`) or rely on a system font that the plugin auto-detects.
 
-## 目录结构
+---
+
+## Directory Structure
 
 ```
 PicUp/
-├── Plugin.php                      # 插件主文件
+├── Plugin.php        # Main plugin file
 ├── README.md
-├── vendor/                         # 存储驱动
-│   ├── DriverInterface.php         # 驱动接口
-│   ├── LocalDriver.php             # 本地存储
-│   ├── LskyDriver.php              # Lsky Pro 兰空图床
-│   ├── S3Driver.php                # AWS S3 兼容（MinIO/R2/OSS 等）
-│   ├── WebDavDriver.php            # WebDAV
-│   ├── GithubDriver.php            # GitHub 仓库
-│   ├── SmmsDriver.php              # S.EE (SM.MS)
-│   ├── AliyunOssDriver.php         # 阿里云 OSS
-│   ├── TencentCosDriver.php        # 腾讯云 COS
-│   ├── QiniuKodoDriver.php         # 七牛云 KODO
-│   ├── UpyunDriver.php             # 又拍云
-│   ├── EasyimageDriver.php         # EasyImage 简单图床
-│   ├── CfimgbedDriver.php          # CloudFlare ImgBed
-│   ├── NodeimageDriver.php         # NodeImage 图床
-│   ├── CheveretoV4Driver.php       # Chevereto V4 自建图床
-│   ├── ImgurDriver.php             # Imgur 图床
-│   ├── OneimgDriver.php            # 初春图床 (OneImg)
-│   ├── TgImagebedDriver.php        # Telegram 图床 (tg-imagebed)
-│   └── ZpicDriver.php              # Zpic / ImgURL Pro
-└── extensions/                     # 图像处理扩展
-    ├── ExtensionInterface.php      # 扩展接口
-    ├── CompressExtension.php       # 图片压缩
-    ├── WebpExtension.php           # 自动转 WebP
-    └── WatermarkExtension.php      # 添加水印
+├── vendor/           # Storage drivers
+└── extensions/       # Image processing extensions
 ```
 
-## 贡献
+---
 
-欢迎提交 [Issue](https://github.com/lhl77/Typecho-Plugin-PicUp/issues) 或 [Pull Request](https://github.com/lhl77/Typecho-Plugin-PicUp/pulls)。
+## Contributing
+
+Issues and pull requests are welcome on [GitHub](https://github.com/lhl77/Typecho-Plugin-PicUp).
