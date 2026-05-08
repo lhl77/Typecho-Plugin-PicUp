@@ -249,8 +249,11 @@ class S3Driver implements DriverInterface
     {
         $usePathStyle = $this->usePathStyle($endpoint);
 
+        // 对每个路径段分别编码，保留 / 分隔符
+        $encodedKey = implode('/', array_map('rawurlencode', explode('/', $objectKey)));
+
         if ($usePathStyle) {
-            return $endpoint . '/' . $bucket . '/' . rawurlencode($objectKey);
+            return $endpoint . '/' . $bucket . '/' . $encodedKey;
         }
 
         // 虚拟主机风格: https://{bucket}.{host}/{key}
@@ -259,7 +262,7 @@ class S3Driver implements DriverInterface
         $host   = $parsed['host'] ?? '';
         $port   = isset($parsed['port']) ? ':' . $parsed['port'] : '';
 
-        return $scheme . '://' . $bucket . '.' . $host . $port . '/' . rawurlencode($objectKey);
+        return $scheme . '://' . $bucket . '.' . $host . $port . '/' . $encodedKey;
     }
 
     /**

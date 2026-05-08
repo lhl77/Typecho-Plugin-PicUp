@@ -5,7 +5,7 @@
  *
  * @package PicUp
  * @author LHL
- * @version 1.2.2
+ * @version 1.2.3
  * @link https://github.com/lhl77/Typecho-Plugin-PicUp
  */
 
@@ -408,7 +408,7 @@ class Plugin implements PluginInterface
      *     confirm → resolve(true/false)
      *     prompt  → resolve(string/null)
      *
-     * 优先使用 AdminBeautify.alert / .confirm / .prompt 公开 API（v2.1.37+）；
+     * 优先使用 AdminBeautify.alert / .confirm / .prompt 公开 API（v2.2.0+）；
      * 降级到 _abPendingConfirm / _abPendingPrompt 全局回调（旧版 AB）；
      * 无 AB 时使用浏览器原生同步对话框。
      */
@@ -738,7 +738,7 @@ END_SCRIPT;
       <a href="https://github.com/lhl77/Typecho-Plugin-PicUp" target="_blank">GitHub</a>　|　
       <a href="https://blog.lhl.one/artical/1026.html" target="_blank">使用文档</a>
     </p>
-    <p>版本：v1.2.2</p>
+    <p>版本：v1.2.3</p>
   </div>
   <div class="picup-info-card picup-ab-card">
     <h4>✨ 推荐安装 Admin Beautify<span class="ab-badge">AB-Store</span></h4>
