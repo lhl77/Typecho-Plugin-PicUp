@@ -5,7 +5,7 @@
  *
  * @package PicUp
  * @author LHL
- * @version 1.2.3
+ * @version 1.2.4
  * @link https://github.com/lhl77/Typecho-Plugin-PicUp
  */
 
@@ -73,6 +73,11 @@ class HtmlElement extends \Typecho\Widget\Helper\Form\Element
 
 class Plugin implements PluginInterface
 {
+    /**
+     * 每次请求仅执行一次上传回调兼容修复。
+     */
+    private static bool $uploadCompatPatched = false;
+
     /**
      * 所有可用驱动类映射（自动扫描构建，key 为驱动标识符）
      * 驱动文件放入 vendor/ 目录，文件名形如 XxxDriver.php，
@@ -376,6 +381,9 @@ class Plugin implements PluginInterface
      */
     public static function adminHeader(string $header): string
     {
+        // 在后台请求期提前修复上传回调顺序，避免首次上传仍被后续插件覆盖。
+        self::ensureUploadCompatibilityPatch();
+
         // ── 读取当前插件配置，输出到前端 JS ──────────────────────────────
         $picupCfgJson = '{}';
         try {
@@ -738,7 +746,7 @@ END_SCRIPT;
       <a href="https://github.com/lhl77/Typecho-Plugin-PicUp" target="_blank">GitHub</a>　|　
       <a href="https://blog.lhl.one/artical/1026.html" target="_blank">使用文档</a>
     </p>
-    <p>版本：v1.2.3</p>
+    <p>版本：v1.2.4</p>
   </div>
   <div class="picup-info-card picup-ab-card">
     <h4>✨ 推荐安装 Admin Beautify<span class="ab-badge">AB-Store</span></h4>
@@ -1038,8 +1046,158 @@ HTML;
         return in_array(strtolower($ext), $imgExts, true);
     }
 
+    /**
+     * 将 PicUp 的 upload/modify 回调移动到同组件回调链末尾。
+     *
+     * 背景：Typecho 会执行所有回调并以最后一个返回值作为最终结果；
+     * 如 Mirai Core 在 PicUp 后返回 false 时，会覆盖 PicUp 成功结果。
+     *
+     * 该修复直接更新 plugins 配置并同步当前请求内存态，无需禁用/启用插件。
+     */
+    private static function ensureUploadCompatibilityPatch(): void
+    {
+        if (self::$uploadCompatPatched) {
+            return;
+        }
+        self::$uploadCompatPatched = true;
+
+        try {
+            $plugins = TypechoPlugin::export();
+            if (!is_array($plugins) || !isset($plugins['handles']) || !is_array($plugins['handles'])) {
+                return;
+            }
+
+            $changed = false;
+            // Mirai Core 同时接管 Widget_Upload 时，可能返回 false 覆盖 PicUp 结果。
+            // 这里直接移除其 upload/modify 回调，保留 PicUp 作为唯一上传处理器。
+            $changed = self::removeMiraiUploadCallbacks($plugins['handles'], 'Widget_Upload:uploadHandle', 'uploadHandle') || $changed;
+            $changed = self::removeMiraiUploadCallbacks($plugins['handles'], 'Widget_Upload:modifyHandle', 'modifyHandle') || $changed;
+
+            $changed = self::movePicUpCallbackToTail($plugins['handles'], 'Widget_Upload:uploadHandle', 'uploadHandle') || $changed;
+            $changed = self::movePicUpCallbackToTail($plugins['handles'], 'Widget_Upload:modifyHandle', 'modifyHandle') || $changed;
+
+            if (!$changed) {
+                return;
+            }
+
+            // 同步当前请求中的插件回调表
+            TypechoPlugin::init($plugins);
+
+            // 持久化到 options.plugins，后续请求无需重复修复
+            Helper::setOption('plugins', $plugins);
+        } catch (\Throwable $e) {
+            error_log('[PicUp] 兼容 Mirai Core 回调顺序修复失败：' . $e->getMessage());
+        }
+    }
+
+    /**
+     * 将 PicUp 的指定回调移动到组件回调链末尾。
+     */
+    private static function movePicUpCallbackToTail(array &$handles, string $componentKey, string $method): bool
+    {
+        if (!isset($handles[$componentKey]) || !is_array($handles[$componentKey])) {
+            return false;
+        }
+
+        $callbacks = $handles[$componentKey];
+        $original  = $callbacks;
+
+        foreach ($callbacks as $weight => $callback) {
+            if (self::isPicUpCallback($callback, $method)) {
+                unset($callbacks[$weight]);
+            }
+        }
+
+        if (count($callbacks) === count($original)) {
+            // 当前链中没有 PicUp 回调，无需修复
+            return false;
+        }
+
+        $maxWeight = 0.0;
+        foreach (array_keys($callbacks) as $weight) {
+            $w = (float)$weight;
+            if ($w > $maxWeight) {
+                $maxWeight = $w;
+            }
+        }
+
+        $newWeight = $maxWeight + 0.001;
+        $callbacks[(string)$newWeight] = [__CLASS__, $method];
+        ksort($callbacks, SORT_NUMERIC);
+
+        if ($callbacks === $original) {
+            return false;
+        }
+
+        $handles[$componentKey] = $callbacks;
+        return true;
+    }
+
+    /**
+     * 判断某个回调是否属于 PicUp 指定方法。
+     */
+    private static function isPicUpCallback($callback, string $method): bool
+    {
+        if (!is_array($callback) || count($callback) < 2) {
+            return false;
+        }
+
+        $className  = ltrim((string)$callback[0], '\\');
+        $methodName = (string)$callback[1];
+        if (strcasecmp($methodName, $method) !== 0) {
+            return false;
+        }
+
+        if ($className === __CLASS__) {
+            return true;
+        }
+
+        return stripos($className, 'TypechoPlugin\\PicUp\\Plugin') !== false
+            || stripos($className, 'PicUp_Plugin') !== false;
+    }
+
+    /**
+     * 移除 Mirai Core 对上传链路的回调，避免覆盖 PicUp 返回值。
+     */
+    private static function removeMiraiUploadCallbacks(array &$handles, string $componentKey, string $method): bool
+    {
+        if (!isset($handles[$componentKey]) || !is_array($handles[$componentKey])) {
+            return false;
+        }
+
+        $callbacks = $handles[$componentKey];
+        $changed = false;
+
+        foreach ($callbacks as $weight => $callback) {
+            if (!is_array($callback) || count($callback) < 2) {
+                continue;
+            }
+
+            $className  = ltrim((string)$callback[0], '\\');
+            $methodName = (string)$callback[1];
+
+            if (strcasecmp($methodName, $method) !== 0) {
+                continue;
+            }
+
+            if ($className === 'MiraiCore_Plugin' || stripos($className, 'MiraiCore_Plugin') !== false) {
+                unset($callbacks[$weight]);
+                $changed = true;
+            }
+        }
+
+        if ($changed) {
+            ksort($callbacks, SORT_NUMERIC);
+            $handles[$componentKey] = $callbacks;
+        }
+
+        return $changed;
+    }
+
     public static function uploadHandle(array $file)
     {
+        self::ensureUploadCompatibilityPatch();
+
         if (empty($file['name'])) {
             error_log('[PicUp] uploadHandle: 文件名为空');
             return false;
@@ -1153,6 +1311,8 @@ HTML;
 
     public static function modifyHandle(array $content, array $file)
     {
+        self::ensureUploadCompatibilityPatch();
+
         if (empty($file['name'])) {
             return false;
         }
