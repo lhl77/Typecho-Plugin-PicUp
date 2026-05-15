@@ -5,7 +5,7 @@
  *
  * @package PicUp
  * @author LHL
- * @version 1.2.4
+ * @version 1.2.5
  * @link https://github.com/lhl77/Typecho-Plugin-PicUp
  */
 
@@ -635,7 +635,7 @@ display:none;max-width:300px;line-height:1.4;pointer-events:none;transition:opac
                 var sel=getVisiblePuSel();
                 var cb=getVisiblePuCb();
                 if(sel&&sel.value){
-                    try{this.setRequestHeader('X-PicUp-Profile',sel.value);}catch(e){}
+                    try{this.setRequestHeader('X-PicUp-Profile',encodeURIComponent(sel.value));}catch(e){}
                 }
                 if(cb&&cb.checked){
                     try{this.setRequestHeader('X-PicUp-Force','1');}catch(e){}
@@ -746,7 +746,7 @@ END_SCRIPT;
       <a href="https://github.com/lhl77/Typecho-Plugin-PicUp" target="_blank">GitHub</a>　|　
       <a href="https://blog.lhl.one/artical/1026.html" target="_blank">使用文档</a>
     </p>
-    <p>版本：v1.2.4</p>
+    <p>版本：v1.2.5</p>
   </div>
   <div class="picup-info-card picup-ab-card">
     <h4>✨ 推荐安装 Admin Beautify<span class="ab-badge">AB-Store</span></h4>
@@ -1217,7 +1217,7 @@ HTML;
         // 允许通过 POST 参数 _picup_force=1 或 HTTP 头 X-PicUp-Force 强制走 PicUp
         $overrideProfile = isset($_POST['_picup_profile']) ? trim((string)$_POST['_picup_profile']) : '';
         if ($overrideProfile === '' && !empty($_SERVER['HTTP_X_PICUP_PROFILE'])) {
-            $overrideProfile = trim((string)$_SERVER['HTTP_X_PICUP_PROFILE']);
+            $overrideProfile = trim(urldecode((string)$_SERVER['HTTP_X_PICUP_PROFILE']));
         }
         $forceUpload = !empty($_POST['_picup_force']) || !empty($_SERVER['HTTP_X_PICUP_FORCE']);
 
@@ -1326,7 +1326,7 @@ HTML;
         // 同 uploadHandle，不能 return false，须自行完成本地存储。
         $overrideProfile = isset($_POST['_picup_profile']) ? trim((string)$_POST['_picup_profile']) : '';
         if ($overrideProfile === '' && !empty($_SERVER['HTTP_X_PICUP_PROFILE'])) {
-            $overrideProfile = trim((string)$_SERVER['HTTP_X_PICUP_PROFILE']);
+            $overrideProfile = trim(urldecode((string)$_SERVER['HTTP_X_PICUP_PROFILE']));
         }
         $forceUpload = !empty($_POST['_picup_force']) || !empty($_SERVER['HTTP_X_PICUP_FORCE']);
 
@@ -1462,9 +1462,10 @@ HTML;
             return '';
         }
 
-        // 本地路径（以 / 开头）：模拟 Typecho 默认行为，拼接站点 URL
-        if ($path[0] === '/') {
+        // 本地路径（以 / 开头，或者以 usr/uploads 开头）：模拟 Typecho 默认行为，拼接站点 URL
+        if ($path[0] === '/' || strpos($path, 'usr/uploads/') === 0) {
             $options = Options::alloc();
+            $path = $path[0] === '/' ? $path : '/' . $path;
             return Common::url(
                 $path,
                 defined('__TYPECHO_UPLOAD_URL__') ? __TYPECHO_UPLOAD_URL__ : $options->siteUrl

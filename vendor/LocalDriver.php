@@ -8,7 +8,7 @@
  *
  * @package PicUp
  * @author LHL
- * @version 1.0.0
+ * @version 1.0.1
  */
 
 namespace TypechoPlugin\PicUp\vendor;
@@ -143,7 +143,7 @@ class LocalDriver implements DriverInterface
     public function getStoredPath(string $remotePath, string $uploadedUrl): string
     {
         // uploadedUrl 即 upload() 返回的相对路径，如 usr/uploads/2026/03/abc.jpg
-        return $uploadedUrl;
+        return $this->getUrl($uploadedUrl);
     }
 
     /**
