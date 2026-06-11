@@ -28,7 +28,7 @@ interface ExtensionInterface
 
     /**
      * 获取扩展执行优先级（数值越小越先执行）
-     * 建议范围：10-99，压缩=10，水印=20，WebP转换=30
+        * 建议范围：10-99，压缩=10，水印=20，AVIF转换=25，WebP转换=30
      *
      * @return int
      */
