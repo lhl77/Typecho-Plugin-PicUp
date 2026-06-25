@@ -5,7 +5,7 @@
  *
  * @package PicUp
  * @author LHL
- * @version 1.2.6
+ * @version 1.2.7
  * @link https://github.com/lhl77/Typecho-Plugin-PicUp
  */
 
@@ -746,7 +746,7 @@ END_SCRIPT;
       <a href="https://github.com/lhl77/Typecho-Plugin-PicUp" target="_blank">GitHub</a>　|　
       <a href="https://blog.lhl.one/artical/1026.html" target="_blank">使用文档</a>
     </p>
-    <p>版本：v1.2.6</p>
+    <p>版本：v1.2.7</p>
   </div>
   <div class="picup-info-card picup-ab-card">
     <h4>✨ 推荐安装 Admin Beautify<span class="ab-badge">AB-Store</span></h4>
@@ -1455,8 +1455,17 @@ HTML;
         return $driver->delete($path);
     }
 
-    public static function attachmentHandle(Config $attachment): string
+    public static function attachmentHandle($content): string
     {
+        $attachment = null;
+        if ($content instanceof Config) {
+            $attachment = $content;
+        } elseif (is_array($content) && isset($content['attachment'])) {
+            $attachment = is_object($content['attachment'])
+                ? $content['attachment']
+                : new Config((array)$content['attachment']);
+        }
+
         $path = (string)($attachment->path ?? '');
         if (empty($path)) {
             return '';
