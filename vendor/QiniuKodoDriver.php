@@ -92,6 +92,13 @@ class QiniuKodoDriver implements DriverInterface
                 'description' => '绑定的自定义访问域名，如 https://cdn.example.com（必填，KODO 不提供默认公开域名）',
                 'required'    => true,
             ],
+            'imageSuffix' => [
+                'label'       => '图片后缀',
+                'type'        => 'text',
+                'default'     => '',
+                'description' => '仅对图片 URL 追加后缀（如 -imageFop 或 ?imageView2/2/w/800）。文档：https://developer.qiniu.com/kodo/8623/dev-the-picture-style',
+                'required'    => false,
+            ],
         ];
     }
 
@@ -160,6 +167,7 @@ class QiniuKodoDriver implements DriverInterface
         $key = preg_match('#^https?://#i', $remotePath)
             ? rawurldecode(ltrim(parse_url($remotePath, PHP_URL_PATH) ?: '', '/'))
             : ltrim($remotePath, '/');
+        $key = $this->stripConfiguredImageSuffix($key);
         $entryCoded  = $this->base64UrlSafe($bucket . ':' . $key);
         $path        = '/rs/delete/' . $entryCoded;
         $accessToken = $this->buildQBoxToken($accessKey, $secretKey, $path);
@@ -190,7 +198,14 @@ class QiniuKodoDriver implements DriverInterface
     {
         $urlPrefix = rtrim($this->config['urlPrefix'] ?? '', '/');
         $key       = ltrim($remotePath, '/');
-        return $urlPrefix . '/' . $key;
+        $url       = $urlPrefix . '/' . $key;
+
+        $imageSuffix = (string)($this->config['imageSuffix'] ?? '');
+        if ($imageSuffix !== '' && $this->isImageKey($key)) {
+            $url .= $imageSuffix;
+        }
+
+        return $url;
     }
 
     /** {@inheritdoc} */
@@ -247,5 +262,34 @@ class QiniuKodoDriver implements DriverInterface
     private function base64UrlSafe(string $data): string
     {
         return str_replace(['+', '/'], ['-', '_'], base64_encode($data));
+    }
+
+    /**
+     * 若配置了图片后缀，删除时需先从 key 末尾剥离。
+     */
+    private function stripConfiguredImageSuffix(string $key): string
+    {
+        $imageSuffix = (string)($this->config['imageSuffix'] ?? '');
+        if ($imageSuffix === '') {
+            return $key;
+        }
+
+        if (substr($key, -strlen($imageSuffix)) === $imageSuffix) {
+            return substr($key, 0, -strlen($imageSuffix));
+        }
+
+        return $key;
+    }
+
+    /**
+     * 判断对象 key 是否为常见图片类型。
+     */
+    private function isImageKey(string $key): bool
+    {
+        $path = parse_url($key, PHP_URL_PATH);
+        $ext = strtolower(pathinfo($path !== null ? $path : $key, PATHINFO_EXTENSION));
+        return in_array($ext, [
+            'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tiff', 'tif', 'avif', 'svg',
+        ], true);
     }
 }

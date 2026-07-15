@@ -5,7 +5,7 @@
  *
  * @package PicUp
  * @author LHL
- * @version 1.2.7
+ * @version 1.2.8
  * @link https://github.com/lhl77/Typecho-Plugin-PicUp
  */
 
@@ -165,6 +165,8 @@ class Plugin implements PluginInterface
 
         // 迁移：确保新增的 suffixProfiles 选项存在（插件升级未经禁用/启用时自动补齐）
         self::ensureOption('suffixProfiles', '{}');
+        self::ensureOption('storagePathTemplate', '{year}/{month}/');
+        self::ensureOption('abPromoHidden', '0');
 
         // 清理旧版本保存的 HtmlElement 占位键（__picup_html_*），
         // 这些键曾因 addInput 误用而被写入配置，key 编号漂移会导致 getInput() 返回 null 崩溃
@@ -715,6 +717,13 @@ END_SCRIPT;
         $form->addItem(new HtmlElement(<<<'HTML'
 <style>
 .picup-info-bar{display:flex!important;flex-wrap:wrap!important;gap:10px!important;align-items:stretch!important;margin:0 0 20px!important;}
+.picup-top-actions{display:flex!important;justify-content:flex-end!important;align-items:center!important;margin:0 0 10px!important;}
+.picup-promote-box{display:flex!important;align-items:center!important;gap:8px!important;flex-wrap:wrap!important;justify-content:flex-end!important;}
+.picup-promote-text{font-size:12px!important;color:var(--md-on-surface-variant,#49454f)!important;}
+.picup-promote-btn{display:inline-flex!important;align-items:center!important;justify-content:center!important;gap:6px!important;padding:6px 12px!important;border-radius:9999px!important;border:1px solid var(--md-outline-variant,#cac4d0)!important;background:var(--md-surface,#fff)!important;color:var(--md-on-surface,#1c1b1f)!important;font-size:12px!important;font-weight:600!important;cursor:pointer!important;text-decoration:none!important;}
+.picup-promote-btn:hover{opacity:.9!important;text-decoration:none!important;}
+.picup-promote-btn.pu-primary{border-color:#15803d!important;background:#dcfce7!important;color:#166534!important;}
+.picup-promote-btn.pu-warn{border-color:#b45309!important;background:#fff7ed!important;color:#92400e!important;}
 .picup-info-card{
     flex:1!important;min-width:220px!important;padding:14px 16px!important;border-radius:10px!important;line-height:1.6!important;
     border:1px solid var(--md-outline-variant,#cac4d0)!important;
@@ -730,14 +739,47 @@ END_SCRIPT;
 .picup-ab-card p{color:#78350f!important;}
 .picup-ab-card a{color:#b45309!important;}
 .picup-ab-card .ab-badge{display:inline-block!important;padding:1px 7px!important;border-radius:9999px!important;background:#f59e0b!important;color:#fff!important;font-size:11px!important;font-weight:600!important;margin-left:6px!important;vertical-align:middle!important;}
+.picup-ab-open-btn{display:inline-flex!important;align-items:center!important;justify-content:center!important;gap:6px!important;padding:6px 12px!important;border:1px solid #b45309!important;border-radius:9999px!important;background:#fff7ed!important;color:#92400e!important;font-size:12px!important;font-weight:600!important;cursor:pointer!important;}
+.picup-ab-open-btn:hover{background:#ffedd5!important;}
+.picup-promote-modal-mask{position:fixed!important;inset:0!important;z-index:2147482900!important;background:rgba(0,0,0,.45)!important;display:none!important;align-items:center!important;justify-content:center!important;padding:16px!important;box-sizing:border-box!important;}
+.picup-promote-modal-mask.is-open{display:flex!important;}
+.picup-promote-modal{width:min(860px,96vw)!important;max-height:min(88vh,900px)!important;overflow:auto!important;background:var(--md-surface,#fff)!important;border-radius:12px!important;border:1px solid var(--md-outline-variant,#cac4d0)!important;box-shadow:0 18px 55px rgba(0,0,0,.3)!important;}
+.picup-promote-modal-head{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:8px!important;padding:12px 14px!important;border-bottom:1px solid var(--md-outline-variant,#e5e7eb)!important;}
+.picup-promote-modal-title{margin:0!important;font-size:15px!important;font-weight:700!important;color:var(--md-on-surface,#1c1b1f)!important;}
+.picup-promote-modal-close{padding:5px 10px!important;border-radius:9999px!important;border:1px solid var(--md-outline-variant,#d1d5db)!important;background:var(--md-surface-container-low,#f7f7f8)!important;color:var(--md-on-surface,#1c1b1f)!important;font-size:12px!important;font-weight:600!important;cursor:pointer!important;}
+.picup-promote-modal-body{padding:12px 14px 14px!important;}
+.picup-promote-modal-tip{margin:0 0 10px!important;font-size:12px!important;color:var(--md-on-surface-variant,#4b5563)!important;line-height:1.6!important;}
+.picup-promote-md{width:100%!important;height:300px!important;font-family:monospace!important;font-size:13px!important;line-height:1.6!important;border:1px solid var(--md-outline-variant,#d1d5db)!important;border-radius:8px!important;padding:10px!important;box-sizing:border-box!important;background:var(--md-surface,#fff)!important;color:var(--md-on-surface,#111827)!important;}
+.picup-promote-modal-actions{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:10px!important;margin-top:10px!important;flex-wrap:wrap!important;}
+.picup-promote-copy{padding:7px 14px!important;border-radius:9999px!important;border:1px solid #166534!important;background:#22c55e!important;color:#fff!important;font-size:12px!important;font-weight:700!important;cursor:pointer!important;}
+.picup-promote-copy-status{font-size:12px!important;color:#166534!important;min-height:18px!important;}
 [data-theme="dark"] .picup-info-card{border-color:var(--md-dark-outline-variant,#49454f)!important;background:var(--md-dark-surface-container,#2b2930)!important;}
 [data-theme="dark"] .picup-info-card h4{color:var(--md-dark-on-surface,#e6e1e5)!important;}
 [data-theme="dark"] .picup-info-card p{color:var(--md-dark-on-surface-variant,#cac4d0)!important;}
 [data-theme="dark"] .picup-info-card a{color:var(--md-dark-primary,#d0bcff)!important;}
+[data-theme="dark"] .picup-promote-text{color:var(--md-dark-on-surface-variant,#cac4d0)!important;}
+[data-theme="dark"] .picup-promote-btn{border-color:var(--md-dark-outline-variant,#49454f)!important;background:var(--md-dark-surface,#1c1b1f)!important;color:var(--md-dark-on-surface,#e6e1e5)!important;}
+[data-theme="dark"] .picup-promote-btn.pu-primary{border-color:#16a34a!important;background:#14532d!important;color:#dcfce7!important;}
+[data-theme="dark"] .picup-promote-btn.pu-warn{border-color:#b45309!important;background:#3a2100!important;color:#fbbf24!important;}
 [data-theme="dark"] .picup-ab-card{border-color:#92400e!important;background:#2c1a00!important;}
 [data-theme="dark"] .picup-ab-card h4{color:#fbbf24!important;}
 [data-theme="dark"] .picup-ab-card p,[data-theme="dark"] .picup-ab-card a{color:#fcd34d!important;}
+[data-theme="dark"] .picup-ab-open-btn{border-color:#f59e0b!important;background:#3a2100!important;color:#fbbf24!important;}
+[data-theme="dark"] .picup-promote-modal{background:var(--md-dark-surface,#1c1b1f)!important;border-color:var(--md-dark-outline-variant,#49454f)!important;}
+[data-theme="dark"] .picup-promote-modal-head{border-bottom-color:var(--md-dark-outline-variant,#49454f)!important;}
+[data-theme="dark"] .picup-promote-modal-title{color:var(--md-dark-on-surface,#e6e1e5)!important;}
+[data-theme="dark"] .picup-promote-modal-tip{color:var(--md-dark-on-surface-variant,#cac4d0)!important;}
+[data-theme="dark"] .picup-promote-md{background:var(--md-dark-surface-container,#2b2930)!important;border-color:var(--md-dark-outline-variant,#49454f)!important;color:var(--md-dark-on-surface,#e6e1e5)!important;}
+[data-theme="dark"] .picup-promote-modal-close{border-color:var(--md-dark-outline-variant,#49454f)!important;background:var(--md-dark-surface-container,#2b2930)!important;color:var(--md-dark-on-surface,#e6e1e5)!important;}
+[data-theme="dark"] .picup-promote-copy-status{color:#86efac!important;}
 </style>
+<div class="picup-top-actions">
+    <div class="picup-promote-box">
+        <span class="picup-promote-text">如果您觉得 PicUp 插件好用的话，欢迎</span>
+        <button type="button" id="picup-promote-open" class="picup-promote-btn pu-primary">推广PicUp</button>
+        <a class="picup-promote-btn pu-warn" href="https://blog.lhl.one/about.html#支持" target="_blank">打赏我</a>
+    </div>
+</div>
 <div class="picup-info-bar">
   <div class="picup-info-card">
     <h4>PicUp — 多存储后端上传&处理插件</h4>
@@ -746,17 +788,149 @@ END_SCRIPT;
       <a href="https://github.com/lhl77/Typecho-Plugin-PicUp" target="_blank">GitHub</a>　|　
       <a href="https://blog.lhl.one/artical/1026.html" target="_blank">使用文档</a>
     </p>
-    <p>版本：v1.2.7</p>
+    <p>版本：v1.2.8</p>
   </div>
   <div class="picup-info-card picup-ab-card">
-    <h4>✨ 推荐安装 Admin Beautify<span class="ab-badge">AB-Store</span></h4>
+    <h4>✨ 推荐安装 AB Admin</h4>
     <p>
-      最美后台美化插件 (<a href="https://blog.lhl.one/artical/977.html" target="_blank"> 图文详情 </a>)，安装 <a href="https://github.com/lhl77/Typecho-Plugin-AdminBeautify" target="_blank">AdminBeautify</a> 后，
+      最美后台美化插件 (<a href="https://blog.lhl.one/artical/977.html" target="_blank"> 图文详情 </a>)，安装 <a href="https://github.com/lhl77/Typecho-Plugin-AdminBeautify" target="_blank">AB Admin</a> 后，
       可通过内置 <strong>AB-Store</strong> 插件仓库一键更新本插件，无需手动下载替换。
     </p>
+        <p style="margin-top:10px!important;display:flex!important;align-items:center!important;gap:8px!important;flex-wrap:wrap!important;">
+            <button type="button" id="picup-ab-promo-open" class="picup-ab-open-btn">打开图文推广</button>
+            <span id="picup-ab-promo-status" style="font-size:12px!important;opacity:.85;"></span>
+        </p>
   </div>
 </div>
+<div id="picup-promote-modal-mask" class="picup-promote-modal-mask" aria-hidden="true">
+    <div class="picup-promote-modal" role="dialog" aria-modal="true" aria-labelledby="picup-promote-modal-title">
+        <div class="picup-promote-modal-head">
+            <h4 id="picup-promote-modal-title" class="picup-promote-modal-title">推广PicUp文案（Markdown）</h4>
+            <button type="button" id="picup-promote-close" class="picup-promote-modal-close">关闭</button>
+        </div>
+        <div class="picup-promote-modal-body">
+            <p class="picup-promote-modal-tip">可按需替换下方图片链接为你的截图，再点击“复制文案”发布到社群、博客或朋友圈。</p>
+            <textarea id="picup-promote-markdown" class="picup-promote-md"># 我在用 PicUp：一个好用的 Typecho 上传插件
+
+如果你在用 Typecho，推荐试试 PicUp。
+
+- 支持多种存储驱动（本地、OSS、COS、Qiniu Kodo、WebDAV、GitHub、Upyun 等）
+- 支持上传流程扩展（如压缩、水印、格式处理）
+- 支持默认目录模板和灵活路径规则
+- 支持按后缀切换上传方案
+- 与 AB Admin 深度适配，附件插入与管理体验更顺手
+
+项目地址：
+- GitHub: https://github.com/lhl77/Typecho-Plugin-PicUp
+- 使用文档: https://blog.lhl.one/artical/1026.html
+
+效果截图（可替换为你的截图）：
+![PicUp 截图 1](https://i.see.you/2026/03/28/Pg7m/8ba3d18125f5565ba61cf5c59e171cb9.webp)
+![PicUp 截图 2](https://your-image-2.png)
+![PicUp 截图 3](https://your-image-3.png)
+
+
+推广示例： https://blog.lhl.one/artical/1026.html
+
+如果你也觉得好用，欢迎一起推广 PicUp ❤️
+</textarea>
+            <div class="picup-promote-modal-actions">
+                <button type="button" id="picup-promote-copy" class="picup-promote-copy">复制文案</button>
+                <span id="picup-promote-copy-status" class="picup-promote-copy-status"></span>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+(function(){
+    function initPromoteModal(){
+        var openBtn=document.getElementById('picup-promote-open');
+        var closeBtn=document.getElementById('picup-promote-close');
+        var mask=document.getElementById('picup-promote-modal-mask');
+        var copyBtn=document.getElementById('picup-promote-copy');
+        var textArea=document.getElementById('picup-promote-markdown');
+        var status=document.getElementById('picup-promote-copy-status');
+        if(!openBtn||!mask||!copyBtn||!textArea){return;}
+
+        // 关键兼容：AB Admin 页面容器可能带 transform/overflow，
+        // fixed 弹窗必须挂到 body 才能按浏览器视口全屏显示。
+        if(mask.parentNode!==document.body){
+            document.body.appendChild(mask);
+        }
+
+        if(openBtn.dataset.promoteBound==='1'){return;}
+        openBtn.dataset.promoteBound='1';
+
+        function openModal(){
+            mask.classList.add('is-open');
+            mask.setAttribute('aria-hidden','false');
+            document.documentElement.style.overflow='hidden';
+            setTimeout(function(){ textArea.focus(); textArea.select(); }, 0);
+        }
+
+        function closeModal(){
+            mask.classList.remove('is-open');
+            mask.setAttribute('aria-hidden','true');
+            document.documentElement.style.overflow='';
+        }
+
+        openBtn.addEventListener('click',openModal);
+        if(closeBtn){closeBtn.addEventListener('click',closeModal);}
+        mask.addEventListener('click',function(e){ if(e.target===mask){closeModal();} });
+
+        document.addEventListener('keydown',function(e){
+            if(e.key==='Escape'&&mask.classList.contains('is-open')){closeModal();}
+        });
+
+        copyBtn.addEventListener('click',function(){
+            var text=textArea.value||'';
+            function setOk(msg){
+                if(status){status.textContent=msg||'复制成功';}
+                setTimeout(function(){ if(status&&status.textContent===msg){status.textContent='';} }, 2200);
+            }
+            if(navigator.clipboard&&navigator.clipboard.writeText){
+                navigator.clipboard.writeText(text).then(function(){
+                    setOk('复制成功');
+                }).catch(function(){
+                    textArea.focus();
+                    textArea.select();
+                    try{
+                        document.execCommand('copy');
+                        setOk('复制成功');
+                    }catch(err){
+                        if(status){status.textContent='复制失败，请手动复制';}
+                    }
+                });
+            } else {
+                textArea.focus();
+                textArea.select();
+                try{
+                    document.execCommand('copy');
+                    setOk('复制成功');
+                }catch(err){
+                    if(status){status.textContent='复制失败，请手动复制';}
+                }
+            }
+        });
+    }
+
+    if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',initPromoteModal);}else{initPromoteModal();}
+    document.addEventListener('ab:pageload',initPromoteModal);
+})();
+</script>
 HTML));
+
+                $abPromoHidden = new Text(
+                        'abPromoHidden',
+                        null,
+                        '0',
+                        _t('AB Admin 推广开关（隐藏字段）'),
+                        _t('内部使用')
+                );
+                $abPromoHidden->input->setAttribute('type', 'hidden');
+                $form->addInput($abPromoHidden);
+
+                $form->addItem(new HtmlElement(self::buildAbPromoHtml()));
 
         // 1. 当前使用的方案名
         $defaultProfile = new Text(
@@ -767,6 +941,17 @@ HTML));
             _t('填写下方 JSON 配置中某个方案的 key，该方案将用于文件上传。<br/>优先级：<b>后缀自定义方案 > 文件接管范围 > 全局默认方案</b>')
         );
         $form->addInput($defaultProfile);
+
+        $storagePathTemplate = new Text(
+            'storagePathTemplate',
+            null,
+            '{year}/{month}/',
+            _t('默认文件存储目录模板'),
+            _t('用于生成远程存储目录，适用于支持路径的存储驱动（如 local、COS、OSS、WebDAV、GitHub、Upyun、Qiniu Kodo）。'
+                . '<br/>默认：<code>{year}/{month}/</code>'
+                . '<br/>可用变量：<code>{year}</code>、<code>{month}</code>、<code>{day}</code>、<code>{md5}</code>、<code>{random}</code>、<code>{random-数字}</code>（如 <code>{random-5}</code>，默认长度 5）。')
+        );
+        $form->addInput($storagePathTemplate);
 
         // 2. 图形化配置编辑器
         $drivers     = self::getDrivers();
@@ -883,6 +1068,201 @@ HTML));
     }
 
     public static function personalConfig(Form $form) {}
+
+        /**
+         * 构建 AB Admin 图文推广面板（可关闭并可从推荐卡重新打开）。
+         */
+        private static function buildAbPromoHtml(): string
+        {
+                return <<<'HTML'
+<ul class="typecho-option" id="typecho-option-item-picup-ab-promo"><li>
+<div id="picup-ab-promo-panel" class="picup-ab-promo-panel">
+<style>
+#typecho-option-item-abPromoHidden{display:none!important;}
+.picup-ab-promo-panel{
+    max-width:1080px!important;margin:4px auto 16px!important;padding:14px!important;
+    border:1px solid #f59e0b!important;border-radius:12px!important;background:#fffbeb!important;
+}
+.picup-ab-promo-head{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:10px!important;margin-bottom:10px!important;}
+.picup-ab-promo-title{margin:0!important;font-size:15px!important;font-weight:700!important;color:#92400e!important;}
+.picup-ab-promo-close{
+    border:1px solid #f59e0b!important;background:#fff!important;color:#92400e!important;
+    border-radius:9999px!important;padding:5px 12px!important;font-size:12px!important;font-weight:600!important;cursor:pointer!important;
+}
+.picup-ab-promo-close:hover{background:#ffedd5!important;}
+.picup-ab-promo-tip{margin:0 0 12px!important;font-size:12px!important;color:#78350f!important;line-height:1.6!important;}
+.picup-ab-promo-grid{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px!important;}
+.picup-ab-promo-item{
+    border:1px solid #fcd34d!important;border-radius:10px!important;background:#fff!important;
+    padding:10px!important;box-sizing:border-box!important;
+}
+.picup-ab-promo-item h5{margin:0 0 6px!important;font-size:13px!important;color:#92400e!important;}
+.picup-ab-promo-item p{margin:0 0 8px!important;font-size:12px!important;color:#78350f!important;line-height:1.5!important;}
+.picup-ab-promo-shot{display:block!important;border-radius:8px!important;overflow:hidden!important;border:1px solid #fed7aa!important;background:#fff!important;cursor:zoom-in!important;padding:0!important;appearance:none!important;}
+.picup-ab-promo-shot img{display:block!important;width:100%!important;height:auto!important;object-fit:cover!important;}
+.picup-ab-fullscreen{position:fixed!important;inset:0!important;z-index:2147483000!important;background:rgba(0,0,0,.92)!important;display:none!important;align-items:center!important;justify-content:center!important;padding:18px!important;box-sizing:border-box!important;}
+.picup-ab-fullscreen.is-open{display:flex!important;}
+.picup-ab-fullscreen img{max-width:100%!important;max-height:100%!important;object-fit:contain!important;box-shadow:0 8px 40px rgba(0,0,0,.45)!important;border-radius:8px!important;}
+.picup-ab-fullscreen-close{position:absolute!important;top:14px!important;right:14px!important;border:1px solid rgba(255,255,255,.35)!important;background:rgba(0,0,0,.3)!important;color:#fff!important;border-radius:9999px!important;padding:6px 12px!important;font-size:12px!important;font-weight:600!important;cursor:pointer!important;}
+[data-theme="dark"] .picup-ab-fullscreen-close{border-color:rgba(255,255,255,.45)!important;}
+[data-theme="dark"] .picup-ab-promo-panel{border-color:#92400e!important;background:#2c1a00!important;}
+[data-theme="dark"] .picup-ab-promo-title{color:#fbbf24!important;}
+[data-theme="dark"] .picup-ab-promo-tip{color:#fcd34d!important;}
+[data-theme="dark"] .picup-ab-promo-close{border-color:#b45309!important;background:#3a2100!important;color:#fbbf24!important;}
+[data-theme="dark"] .picup-ab-promo-item{border-color:#92400e!important;background:#3a2100!important;}
+[data-theme="dark"] .picup-ab-promo-item h5{color:#fbbf24!important;}
+[data-theme="dark"] .picup-ab-promo-item p{color:#fcd34d!important;}
+[data-theme="dark"] .picup-ab-promo-shot{border-color:#92400e!important;background:#2c1a00!important;}
+@media(max-width:900px){.picup-ab-promo-grid{grid-template-columns:1fr!important;}}
+</style>
+    <div class="picup-ab-promo-head">
+        <h4 class="picup-ab-promo-title">为什么推荐深度适配 PicUp 的插件 AB-Admin ？</h4>
+        <button type="button" id="picup-ab-promo-close" class="picup-ab-promo-close">不再显示</button>
+    </div>
+    <p class="picup-ab-promo-tip">
+        AB Admin是一个一款为 Typecho 打造的后台美化增强插件，基于 Material Design 3 风格设计，让后台更美观、更好用。内含更好用的编辑器（适配PicUp）以及更多功能，欢迎下载使用。<br/>
+        图文介绍: <a href="https://see.lhl.one/Typecho-AB-Admin" target="_blank">https://see.lhl.one/Typecho-AB-Admin</a><br/>
+        Github: <a href="https://github.com/lhl77/Typecho-Plugin-AdminBeautify" target="_blank">lhl77/Typecho-Plugin-AdminBeautify</a> 
+    </p>
+
+    <div class="picup-ab-promo-grid">
+        <div class="picup-ab-promo-item">
+            <h5>1. 更方便直观的图片附件插入</h5>
+            <p>支持更直观的附件选择和插入操作，降低编辑成本。</p>
+            <button type="button" class="picup-ab-promo-shot" data-full-src="https://i.see.you/2026/07/15/soX9/e051af1be8482e28383c019079cf352a.jpg" aria-label="全屏预览图片 1">
+                <img alt="更方便直观的图片附件插入" src="https://i.see.you/2026/07/15/soX9/e051af1be8482e28383c019079cf352a.jpg">
+            </button>
+        </div>
+
+        <div class="picup-ab-promo-item">
+            <h5>2. 支持多文件同时选择和上传</h5>
+            <p>可一次选择多个文件并批量上传，显著提升素材整理效率。</p>
+            <button type="button" class="picup-ab-promo-shot" data-full-src="https://i.see.you/2026/07/15/xX6y/e6a720fedf3c91da079582c19b2b84e0.jpg" aria-label="全屏预览图片 2">
+                <img alt="支持多文件同时选择和上传" src="https://i.see.you/2026/07/15/xX6y/e6a720fedf3c91da079582c19b2b84e0.jpg">
+            </button>
+        </div>
+
+        <div class="picup-ab-promo-item">
+            <h5>3. 支持调用其他文章中的图片或附件</h5>
+            <p>插入附件时可跨文章检索并复用已有文件，避免重复上传。</p>
+            <button type="button" class="picup-ab-promo-shot" data-full-src="https://i.see.you/2026/07/15/Kdw9/0ad28c9743dd686c381b9fc7ce840776.jpg" aria-label="全屏预览图片 3">
+                <img alt="支持调用其他文章中的图片或附件" src="https://i.see.you/2026/07/15/Kdw9/0ad28c9743dd686c381b9fc7ce840776.jpg">
+            </button>
+        </div>
+
+        <div class="picup-ab-promo-item">
+            <h5>4. 直观的文件管理界面</h5>
+            <p>更清晰的文件卡片与操作入口，日常维护与归档管理更高效。</p>
+            <button type="button" class="picup-ab-promo-shot" data-full-src="https://i.see.you/2026/07/15/c6kF/2ab6f637f6029d05199377aaa5d432b4.jpg" aria-label="全屏预览图片 4">
+                <img alt="直观的文件管理界面" src="https://i.see.you/2026/07/15/c6kF/2ab6f637f6029d05199377aaa5d432b4.jpg">
+            </button>
+        </div>
+    </div>
+</div>
+<script>
+(function(){
+    function ensureViewer(){
+        var viewer=document.getElementById('picup-ab-promo-viewer');
+        if(viewer){return viewer;}
+        viewer=document.createElement('div');
+        viewer.id='picup-ab-promo-viewer';
+        viewer.className='picup-ab-fullscreen';
+        viewer.innerHTML=''
+            + '<button type="button" class="picup-ab-fullscreen-close" aria-label="关闭预览">关闭(Esc)</button>'
+            + '<img alt="AB Admin 图片预览" src="">';
+        (document.body||document.documentElement).appendChild(viewer);
+
+        var closeBtn=viewer.querySelector('.picup-ab-fullscreen-close');
+        var img=viewer.querySelector('img');
+
+        function closeViewer(){
+            viewer.classList.remove('is-open');
+            if(img){img.src='';}
+            document.documentElement.style.overflow='';
+        }
+
+        viewer.addEventListener('click',function(e){
+            if(e.target===viewer){closeViewer();}
+        });
+        if(closeBtn){closeBtn.addEventListener('click',closeViewer);}
+
+        document.addEventListener('keydown',function(e){
+            if(e.key==='Escape'&&viewer.classList.contains('is-open')){
+                closeViewer();
+            }
+        });
+
+        viewer.__open=function(src,alt){
+            if(!img){return;}
+            img.src=src;
+            img.alt=alt||'AB Admin 推广图预览';
+            viewer.classList.add('is-open');
+            document.documentElement.style.overflow='hidden';
+        };
+        return viewer;
+    }
+
+    function bindShots(){
+        var viewer=ensureViewer();
+        var shots=document.querySelectorAll('.picup-ab-promo-shot[data-full-src]');
+        shots.forEach(function(btn){
+            if(btn.dataset.bound==='1'){return;}
+            btn.dataset.bound='1';
+            btn.addEventListener('click',function(){
+                var img=btn.querySelector('img');
+                var src=btn.getAttribute('data-full-src')||'';
+                var alt=img?img.getAttribute('alt')||'':'';
+                if(src&&viewer&&typeof viewer.__open==='function'){
+                    viewer.__open(src,alt);
+                }
+            });
+        });
+    }
+
+    function setup(){
+        var panel=document.getElementById('picup-ab-promo-panel');
+        var openBtn=document.getElementById('picup-ab-promo-open');
+        var closeBtn=document.getElementById('picup-ab-promo-close');
+        var status=document.getElementById('picup-ab-promo-status');
+        var hiddenInput=document.querySelector('input[name="abPromoHidden"]');
+        if(!panel||!openBtn||!hiddenInput){return;}
+
+        var row=hiddenInput.closest('li');
+        if(row){row.style.display='none';}
+
+        function syncByValue(){
+            var hidden=String(hiddenInput.value||'0')==='1';
+            panel.style.display=hidden?'none':'block';
+            openBtn.textContent=hidden?'查看详情':'隐藏图文';
+            // if(status){
+            //     status.textContent=hidden?'你已关闭图文推广，可随时重新打开。':'';
+            // }
+        }
+
+        openBtn.addEventListener('click',function(){
+            var hidden=String(hiddenInput.value||'0')==='1';
+            hiddenInput.value=hidden?'0':'1';
+            syncByValue();
+        });
+
+        if(closeBtn){
+            closeBtn.addEventListener('click',function(){
+                hiddenInput.value='1';
+                syncByValue();
+            });
+        }
+
+        bindShots();
+        syncByValue();
+    }
+
+    if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',setup);}else{setup();}
+    document.addEventListener('ab:pageload',setup);
+})();
+</script>
+</li></ul>
+HTML;
+        }
 
     /**
      * 检测服务器 OpenSSL 版本，若低于 TLS 1.2 兼容要求则返回警告横幅 HTML，否则返回空字符串。
@@ -1272,9 +1652,7 @@ HTML;
             }
         }
 
-        $date       = new Date();
-        $fileName   = sprintf('%u', crc32(uniqid())) . '.' . $ext;
-        $remotePath = $date->year . '/' . $date->month . '/' . $fileName;
+        $remotePath = self::buildRemotePath($ext, $processedFile);
 
         $uploadedUrl = $driver->upload($processedFile, $remotePath, $processedMime);
 
@@ -1383,17 +1761,15 @@ HTML;
 
         // 由驱动决定是否需要新路径
         if ($driver->alwaysNewPath() || !$oldPath) {
-            $date       = new Date();
-            $fileName   = sprintf('%u', crc32(uniqid())) . '.' . $ext;
-            $remotePath = $date->year . '/' . $date->month . '/' . $fileName;
+            $remotePath = self::buildRemotePath($ext, $processedFile);
         } else {
             // 若 MIME 变化（如 jpg→webp），即便驱动支持复用路径也需要新路径
             if ($processedMime !== $mimeType) {
-                $date       = new Date();
-                $fileName   = sprintf('%u', crc32(uniqid())) . '.' . $ext;
-                $remotePath = $date->year . '/' . $date->month . '/' . $fileName;
+                $remotePath = self::buildRemotePath($ext, $processedFile);
             } else {
-                $remotePath = $oldPath;
+                $remotePath = preg_match('#^https?://#i', (string)$oldPath)
+                    ? self::buildRemotePath($ext, $processedFile)
+                    : $oldPath;
             }
         }
 
@@ -1810,6 +2186,90 @@ HTML;
             'image/avif'    => 'avif',
         ];
         return $map[$mime] ?? null;
+    }
+
+    /**
+     * 读取全局默认存储目录模板。
+     */
+    private static function getStoragePathTemplate(): string
+    {
+        try {
+            $pluginConfig = Options::alloc()->plugin('PicUp');
+            $template = trim((string)($pluginConfig->storagePathTemplate ?? ''));
+            if ($template !== '') {
+                return $template;
+            }
+        } catch (\Throwable $e) {
+            // ignore
+        }
+
+        return '{year}/{month}/';
+    }
+
+    /**
+     * 按目录模板生成远程路径（目录 + 随机文件名）。
+     */
+    private static function buildRemotePath(string $ext, string $localFile = ''): string
+    {
+        $dir = self::renderStoragePathTemplate(self::getStoragePathTemplate(), $localFile);
+        $fileName = sprintf('%u', crc32(uniqid('', true))) . '.' . $ext;
+
+        return $dir === '' ? $fileName : ($dir . '/' . $fileName);
+    }
+
+    /**
+     * 渲染目录模板，支持 {year}/{month}/{day}/{md5}/{random}/{random-N}。
+     */
+    private static function renderStoragePathTemplate(string $template, string $localFile = ''): string
+    {
+        $template = trim(str_replace('\\', '/', $template));
+        if ($template === '') {
+            return '';
+        }
+
+        $md5 = '';
+        if ($localFile !== '' && is_file($localFile)) {
+            $md5 = (string)@md5_file($localFile);
+        }
+        if ($md5 === '') {
+            $md5 = md5(uniqid('', true));
+        }
+
+        $rendered = str_ireplace(
+            ['{year}', '{month}', '{day}', '{md5}'],
+            [date('Y'), date('m'), date('d'), $md5],
+            $template
+        );
+
+        $rendered = preg_replace_callback('/\{random(?:-(\d+))?\}/i', function ($m) {
+            $len = isset($m[1]) && $m[1] !== '' ? (int)$m[1] : 5;
+            if ($len <= 0) {
+                $len = 5;
+            }
+            if ($len > 128) {
+                $len = 128;
+            }
+            return self::generateRandomString($len);
+        }, $rendered);
+
+        $rendered = preg_replace('#/+#', '/', $rendered);
+        return trim((string)$rendered, '/');
+    }
+
+    /**
+     * 生成指定长度的随机字母数字字符串。
+     */
+    private static function generateRandomString(int $length): string
+    {
+        $chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+        $max = strlen($chars) - 1;
+        $out = '';
+
+        for ($i = 0; $i < $length; $i++) {
+            $out .= $chars[random_int(0, $max)];
+        }
+
+        return $out;
     }
 
     private static function buildConfigTemplate(): string
