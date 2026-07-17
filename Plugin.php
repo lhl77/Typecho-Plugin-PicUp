@@ -5,7 +5,7 @@
  *
  * @package PicUp
  * @author LHL
- * @version 1.2.8
+ * @version 1.2.9
  * @link https://github.com/lhl77/Typecho-Plugin-PicUp
  */
 
@@ -714,102 +714,164 @@ END_SCRIPT;
         }
 
         // 0. 顶部插件信息 & AdminBeautify 推荐
-        $form->addItem(new HtmlElement(<<<'HTML'
-<style>
-.picup-info-bar{display:flex!important;flex-wrap:wrap!important;gap:10px!important;align-items:stretch!important;margin:0 0 20px!important;}
-.picup-top-actions{display:flex!important;justify-content:flex-end!important;align-items:center!important;margin:0 0 10px!important;}
-.picup-promote-box{display:flex!important;align-items:center!important;gap:8px!important;flex-wrap:wrap!important;justify-content:flex-end!important;}
-.picup-promote-text{font-size:12px!important;color:var(--md-on-surface-variant,#49454f)!important;}
-.picup-promote-btn{display:inline-flex!important;align-items:center!important;justify-content:center!important;gap:6px!important;padding:6px 12px!important;border-radius:9999px!important;border:1px solid var(--md-outline-variant,#cac4d0)!important;background:var(--md-surface,#fff)!important;color:var(--md-on-surface,#1c1b1f)!important;font-size:12px!important;font-weight:600!important;cursor:pointer!important;text-decoration:none!important;}
-.picup-promote-btn:hover{opacity:.9!important;text-decoration:none!important;}
-.picup-promote-btn.pu-primary{border-color:#15803d!important;background:#dcfce7!important;color:#166534!important;}
-.picup-promote-btn.pu-warn{border-color:#b45309!important;background:#fff7ed!important;color:#92400e!important;}
-.picup-info-card{
-    flex:1!important;min-width:220px!important;padding:14px 16px!important;border-radius:10px!important;line-height:1.6!important;
-    border:1px solid var(--md-outline-variant,#cac4d0)!important;
-    background:var(--md-surface-container-low,#f7f2fa)!important;
-    box-sizing:border-box!important;
-}
-.picup-info-card h4{margin:0 0 6px!important;font-size:14px!important;font-weight:600!important;color:var(--md-on-surface,#1c1b1f)!important;}
-.picup-info-card p{margin:0!important;font-size:12px!important;color:var(--md-on-surface-variant,#49454f)!important;}
-.picup-info-card a{color:var(--md-primary,#6750a4)!important;text-decoration:none!important;}
-.picup-info-card a:hover{text-decoration:underline!important;}
-.picup-ab-card{border-color:#f59e0b!important;background:#fffbeb!important;}
-.picup-ab-card h4{color:#92400e!important;}
-.picup-ab-card p{color:#78350f!important;}
-.picup-ab-card a{color:#b45309!important;}
-.picup-ab-card .ab-badge{display:inline-block!important;padding:1px 7px!important;border-radius:9999px!important;background:#f59e0b!important;color:#fff!important;font-size:11px!important;font-weight:600!important;margin-left:6px!important;vertical-align:middle!important;}
-.picup-ab-open-btn{display:inline-flex!important;align-items:center!important;justify-content:center!important;gap:6px!important;padding:6px 12px!important;border:1px solid #b45309!important;border-radius:9999px!important;background:#fff7ed!important;color:#92400e!important;font-size:12px!important;font-weight:600!important;cursor:pointer!important;}
-.picup-ab-open-btn:hover{background:#ffedd5!important;}
-.picup-promote-modal-mask{position:fixed!important;inset:0!important;z-index:2147482900!important;background:rgba(0,0,0,.45)!important;display:none!important;align-items:center!important;justify-content:center!important;padding:16px!important;box-sizing:border-box!important;}
-.picup-promote-modal-mask.is-open{display:flex!important;}
-.picup-promote-modal{width:min(860px,96vw)!important;max-height:min(88vh,900px)!important;overflow:auto!important;background:var(--md-surface,#fff)!important;border-radius:12px!important;border:1px solid var(--md-outline-variant,#cac4d0)!important;box-shadow:0 18px 55px rgba(0,0,0,.3)!important;}
-.picup-promote-modal-head{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:8px!important;padding:12px 14px!important;border-bottom:1px solid var(--md-outline-variant,#e5e7eb)!important;}
-.picup-promote-modal-title{margin:0!important;font-size:15px!important;font-weight:700!important;color:var(--md-on-surface,#1c1b1f)!important;}
-.picup-promote-modal-close{padding:5px 10px!important;border-radius:9999px!important;border:1px solid var(--md-outline-variant,#d1d5db)!important;background:var(--md-surface-container-low,#f7f7f8)!important;color:var(--md-on-surface,#1c1b1f)!important;font-size:12px!important;font-weight:600!important;cursor:pointer!important;}
-.picup-promote-modal-body{padding:12px 14px 14px!important;}
-.picup-promote-modal-tip{margin:0 0 10px!important;font-size:12px!important;color:var(--md-on-surface-variant,#4b5563)!important;line-height:1.6!important;}
-.picup-promote-md{width:100%!important;height:300px!important;font-family:monospace!important;font-size:13px!important;line-height:1.6!important;border:1px solid var(--md-outline-variant,#d1d5db)!important;border-radius:8px!important;padding:10px!important;box-sizing:border-box!important;background:var(--md-surface,#fff)!important;color:var(--md-on-surface,#111827)!important;}
-.picup-promote-modal-actions{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:10px!important;margin-top:10px!important;flex-wrap:wrap!important;}
-.picup-promote-copy{padding:7px 14px!important;border-radius:9999px!important;border:1px solid #166534!important;background:#22c55e!important;color:#fff!important;font-size:12px!important;font-weight:700!important;cursor:pointer!important;}
-.picup-promote-copy-status{font-size:12px!important;color:#166534!important;min-height:18px!important;}
-[data-theme="dark"] .picup-info-card{border-color:var(--md-dark-outline-variant,#49454f)!important;background:var(--md-dark-surface-container,#2b2930)!important;}
-[data-theme="dark"] .picup-info-card h4{color:var(--md-dark-on-surface,#e6e1e5)!important;}
-[data-theme="dark"] .picup-info-card p{color:var(--md-dark-on-surface-variant,#cac4d0)!important;}
-[data-theme="dark"] .picup-info-card a{color:var(--md-dark-primary,#d0bcff)!important;}
-[data-theme="dark"] .picup-promote-text{color:var(--md-dark-on-surface-variant,#cac4d0)!important;}
-[data-theme="dark"] .picup-promote-btn{border-color:var(--md-dark-outline-variant,#49454f)!important;background:var(--md-dark-surface,#1c1b1f)!important;color:var(--md-dark-on-surface,#e6e1e5)!important;}
-[data-theme="dark"] .picup-promote-btn.pu-primary{border-color:#16a34a!important;background:#14532d!important;color:#dcfce7!important;}
-[data-theme="dark"] .picup-promote-btn.pu-warn{border-color:#b45309!important;background:#3a2100!important;color:#fbbf24!important;}
-[data-theme="dark"] .picup-ab-card{border-color:#92400e!important;background:#2c1a00!important;}
-[data-theme="dark"] .picup-ab-card h4{color:#fbbf24!important;}
-[data-theme="dark"] .picup-ab-card p,[data-theme="dark"] .picup-ab-card a{color:#fcd34d!important;}
-[data-theme="dark"] .picup-ab-open-btn{border-color:#f59e0b!important;background:#3a2100!important;color:#fbbf24!important;}
-[data-theme="dark"] .picup-promote-modal{background:var(--md-dark-surface,#1c1b1f)!important;border-color:var(--md-dark-outline-variant,#49454f)!important;}
-[data-theme="dark"] .picup-promote-modal-head{border-bottom-color:var(--md-dark-outline-variant,#49454f)!important;}
-[data-theme="dark"] .picup-promote-modal-title{color:var(--md-dark-on-surface,#e6e1e5)!important;}
-[data-theme="dark"] .picup-promote-modal-tip{color:var(--md-dark-on-surface-variant,#cac4d0)!important;}
-[data-theme="dark"] .picup-promote-md{background:var(--md-dark-surface-container,#2b2930)!important;border-color:var(--md-dark-outline-variant,#49454f)!important;color:var(--md-dark-on-surface,#e6e1e5)!important;}
-[data-theme="dark"] .picup-promote-modal-close{border-color:var(--md-dark-outline-variant,#49454f)!important;background:var(--md-dark-surface-container,#2b2930)!important;color:var(--md-dark-on-surface,#e6e1e5)!important;}
-[data-theme="dark"] .picup-promote-copy-status{color:#86efac!important;}
-</style>
+        $pluginVersion = '1.2.9';
+        try {
+            $siteUrl = rtrim(Options::alloc()->siteUrl, '/');
+        } catch (\Throwable $e) {
+            $siteUrl = '';
+        }
+        $assetsUrl = $siteUrl . '/usr/plugins/PicUp/assets';
+
+        // 仅当 AB Admin 已启用（plugin:AdminBeautify 选项存在）时才提供 AB Store 一键更新入口
+        $abStoreActive = false;
+        try {
+            $abRow = Db::get()->fetchRow(
+                Db::get()->select('value')->from('table.options')->where('name = ?', 'plugin:AdminBeautify')
+            );
+            $abStoreActive = !empty($abRow);
+        } catch (\Throwable $e) {
+            $abStoreActive = false;
+        }
+        $adminExtendingUrl = $abStoreActive
+            ? ($siteUrl . '/admin/extending.php?panel=AdminBeautifyStore%2FPanel.php')
+            : '';
+
+        // ── 外置 CSS ──
+        $form->addItem(new HtmlElement(
+            '<link rel="stylesheet" href="' . $assetsUrl . '/css/picup-config.css">'
+        ));
+
+        // ── 数据注入脚本（所有 JS 模块依赖的 PHP 数据）──
+        $drivers     = self::getDrivers();
+        $extClasses  = self::getExtensions();
+
+        // driverNames / extNames（用于摘要卡）
+        $driverNames = [];
+        foreach ($drivers as $k => $class) {
+            $driverNames[$k] = $class::getName();
+        }
+        $extNames = [];
+        foreach ($extClasses as $k => $class) {
+            $extNames[$k] = $class::getName();
+        }
+
+        // env（服务器环境）
+        $phpVer     = PHP_VERSION;
+        $opensslVer = '';
+        if (defined('OPENSSL_VERSION_TEXT')) {
+            $opensslVer = OPENSSL_VERSION_TEXT;
+        } elseif (function_exists('curl_version')) {
+            $cv = curl_version();
+            $opensslVer = $cv['ssl_version'] ?? '';
+        }
+        $gdWebp = function_exists('imagewebp')
+            && (!function_exists('gd_info') || (gd_info()['WebP Support'] ?? true));
+        $gdAvif = function_exists('imageavif')
+            && (!function_exists('gd_info') || (gd_info()['AVIF Support'] ?? true));
+        $imWebp = false; $imAvif = false;
+        if (extension_loaded('imagick') && class_exists('Imagick')) {
+            try {
+                $fmts = \Imagick::queryFormats();
+                if (is_array($fmts)) {
+                    $imWebp = in_array('WEBP', $fmts, true);
+                    $imAvif = in_array('AVIF', $fmts, true);
+                }
+            } catch (\Throwable $e) {}
+        }
+        $imAvailable = extension_loaded('imagick') && class_exists('Imagick');
+
+        // driversMeta / extensionsMeta（用于 GUI 编辑器）
+        $driversMeta = [];
+        foreach ($drivers as $key => $class) {
+            $driversMeta[$key] = [
+                'name'   => $class::getName(),
+                'fields' => $class::getConfigFields(),
+            ];
+        }
+        $extensionsMeta = [];
+        foreach ($extClasses as $key => $class) {
+            $missingExts = [];
+            foreach ($class::getRequiredPhpExtensions() as $phpExt) {
+                if (!extension_loaded($phpExt)) {
+                    $missingExts[] = $phpExt;
+                }
+            }
+            $extensionsMeta[$key] = [
+                'name'        => $class::getName(),
+                'description' => $class::getDescription(),
+                'available'   => $class::isAvailable(),
+                'missingExts' => $missingExts,
+                'fields'      => $class::getConfigFields(),
+            ];
+        }
+
+        $picupData = json_encode([
+            'version'           => $pluginVersion,
+            'adminExtendingUrl' => $adminExtendingUrl,
+            'ghRepo'            => 'lhl77/Typecho-Plugin-PicUp',
+            'driverNames'       => $driverNames,
+            'extNames'          => $extNames,
+            'env'               => [
+                'phpVer'      => $phpVer,
+                'opensslVer'  => $opensslVer ?: '—',
+                'gdWebp'      => $gdWebp,
+                'gdAvif'      => $gdAvif,
+                'imAvailable' => $imAvailable,
+                'imWebp'      => $imWebp,
+                'imAvif'      => $imAvif,
+            ],
+            'driversMeta'    => $driversMeta,
+            'extensionsMeta' => $extensionsMeta,
+        ], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT);
+
+        $form->addItem(new HtmlElement(
+            '<script>window.__PICUP__=' . $picupData . ';</script>'
+        ));
+
+        // ── 推广栏 / 信息卡 / 分享弹窗（纯 HTML）──
+        $form->addItem(new HtmlElement(<<<HTML
 <div class="picup-top-actions">
     <div class="picup-promote-box">
         <span class="picup-promote-text">如果您觉得 PicUp 插件好用的话，欢迎</span>
-        <button type="button" id="picup-promote-open" class="picup-promote-btn pu-primary">推广PicUp</button>
-        <a class="picup-promote-btn pu-warn" href="https://blog.lhl.one/about.html#支持" target="_blank">打赏我</a>
+        <button type="button" id="picup-promote-open" class="picup-promote-btn pu-primary">分享PicUp</button>
+        <a class="picup-promote-btn pu-warn" href="https://blog.lhl.one/about.html#支持" target="_blank">打赏作者</a>
     </div>
 </div>
 <div class="picup-info-bar">
   <div class="picup-info-card">
-    <h4>PicUp — 多存储后端上传&处理插件</h4>
-    <p>
-      作者：<a href="https://blog.lhl.one" target="_blank">LHL</a>　|　
-      <a href="https://github.com/lhl77/Typecho-Plugin-PicUp" target="_blank">GitHub</a>　|　
+    <h4 class="picup-info-title">PicUp — 多存储后端上传&处理插件 <small>by LHL</small></h4>
+    <div class="picup-info-meta">
+      <a href="https://blog.lhl.one" target="_blank">作者博客</a><span class="pu-sep">·</span>
+      <a href="https://github.com/lhl77/Typecho-Plugin-PicUp" target="_blank">GitHub</a><span class="pu-sep">·</span>
       <a href="https://blog.lhl.one/artical/1026.html" target="_blank">使用文档</a>
-    </p>
-    <p>版本：v1.2.8</p>
+    </div>
+    <div class="picup-info-actions">
+      <span class="picup-ver-badge" id="picup-ver-badge">v{$pluginVersion}</span>
+      <button type="button" id="picup-check-update-btn" class="picup-update-btn">
+        <span class="picup-update-dot" id="picup-update-dot"></span>检查更新
+      </button>
+    </div>
+    <div id="picup-update-result" class="picup-update-result" style="display:none;"></div>
   </div>
   <div class="picup-info-card picup-ab-card">
-    <h4>✨ 推荐安装 AB Admin</h4>
-    <p>
-      最美后台美化插件 (<a href="https://blog.lhl.one/artical/977.html" target="_blank"> 图文详情 </a>)，安装 <a href="https://github.com/lhl77/Typecho-Plugin-AdminBeautify" target="_blank">AB Admin</a> 后，
-      可通过内置 <strong>AB-Store</strong> 插件仓库一键更新本插件，无需手动下载替换。
+    <h4 class="picup-info-title">✨ 推荐安装 AB Admin</h4>
+    <div class="picup-info-meta">
+      最美后台美化插件，基于 Material Design 3，让后台更美观更好用。
+    </div>
+    <p style="margin:0!important;display:flex!important;align-items:center!important;gap:8px!important;flex-wrap:wrap!important;">
+      <button type="button" id="picup-ab-promo-open" class="picup-ab-open-btn">查看详情</button>
     </p>
-        <p style="margin-top:10px!important;display:flex!important;align-items:center!important;gap:8px!important;flex-wrap:wrap!important;">
-            <button type="button" id="picup-ab-promo-open" class="picup-ab-open-btn">打开图文推广</button>
-            <span id="picup-ab-promo-status" style="font-size:12px!important;opacity:.85;"></span>
-        </p>
   </div>
 </div>
+
 <div id="picup-promote-modal-mask" class="picup-promote-modal-mask" aria-hidden="true">
     <div class="picup-promote-modal" role="dialog" aria-modal="true" aria-labelledby="picup-promote-modal-title">
         <div class="picup-promote-modal-head">
-            <h4 id="picup-promote-modal-title" class="picup-promote-modal-title">推广PicUp文案（Markdown）</h4>
+            <h4 id="picup-promote-modal-title" class="picup-promote-modal-title">分享PicUp文案（Markdown）</h4>
             <button type="button" id="picup-promote-close" class="picup-promote-modal-close">关闭</button>
         </div>
         <div class="picup-promote-modal-body">
-            <p class="picup-promote-modal-tip">可按需替换下方图片链接为你的截图，再点击“复制文案”发布到社群、博客或朋友圈。</p>
+            <p class="picup-promote-modal-tip">可按需替换下方图片链接为你的截图，再点击"复制文案"发布到社群、博客或朋友圈。</p>
             <textarea id="picup-promote-markdown" class="picup-promote-md"># 我在用 PicUp：一个好用的 Typecho 上传插件
 
 如果你在用 Typecho，推荐试试 PicUp。
@@ -830,9 +892,9 @@ END_SCRIPT;
 ![PicUp 截图 3](https://your-image-3.png)
 
 
-推广示例： https://blog.lhl.one/artical/1026.html
+分享示例： https://blog.lhl.one/artical/1026.html
 
-如果你也觉得好用，欢迎一起推广 PicUp ❤️
+如果你也觉得好用，欢迎一起分享 PicUp ❤️
 </textarea>
             <div class="picup-promote-modal-actions">
                 <button type="button" id="picup-promote-copy" class="picup-promote-copy">复制文案</button>
@@ -841,96 +903,22 @@ END_SCRIPT;
         </div>
     </div>
 </div>
-<script>
-(function(){
-    function initPromoteModal(){
-        var openBtn=document.getElementById('picup-promote-open');
-        var closeBtn=document.getElementById('picup-promote-close');
-        var mask=document.getElementById('picup-promote-modal-mask');
-        var copyBtn=document.getElementById('picup-promote-copy');
-        var textArea=document.getElementById('picup-promote-markdown');
-        var status=document.getElementById('picup-promote-copy-status');
-        if(!openBtn||!mask||!copyBtn||!textArea){return;}
-
-        // 关键兼容：AB Admin 页面容器可能带 transform/overflow，
-        // fixed 弹窗必须挂到 body 才能按浏览器视口全屏显示。
-        if(mask.parentNode!==document.body){
-            document.body.appendChild(mask);
-        }
-
-        if(openBtn.dataset.promoteBound==='1'){return;}
-        openBtn.dataset.promoteBound='1';
-
-        function openModal(){
-            mask.classList.add('is-open');
-            mask.setAttribute('aria-hidden','false');
-            document.documentElement.style.overflow='hidden';
-            setTimeout(function(){ textArea.focus(); textArea.select(); }, 0);
-        }
-
-        function closeModal(){
-            mask.classList.remove('is-open');
-            mask.setAttribute('aria-hidden','true');
-            document.documentElement.style.overflow='';
-        }
-
-        openBtn.addEventListener('click',openModal);
-        if(closeBtn){closeBtn.addEventListener('click',closeModal);}
-        mask.addEventListener('click',function(e){ if(e.target===mask){closeModal();} });
-
-        document.addEventListener('keydown',function(e){
-            if(e.key==='Escape'&&mask.classList.contains('is-open')){closeModal();}
-        });
-
-        copyBtn.addEventListener('click',function(){
-            var text=textArea.value||'';
-            function setOk(msg){
-                if(status){status.textContent=msg||'复制成功';}
-                setTimeout(function(){ if(status&&status.textContent===msg){status.textContent='';} }, 2200);
-            }
-            if(navigator.clipboard&&navigator.clipboard.writeText){
-                navigator.clipboard.writeText(text).then(function(){
-                    setOk('复制成功');
-                }).catch(function(){
-                    textArea.focus();
-                    textArea.select();
-                    try{
-                        document.execCommand('copy');
-                        setOk('复制成功');
-                    }catch(err){
-                        if(status){status.textContent='复制失败，请手动复制';}
-                    }
-                });
-            } else {
-                textArea.focus();
-                textArea.select();
-                try{
-                    document.execCommand('copy');
-                    setOk('复制成功');
-                }catch(err){
-                    if(status){status.textContent='复制失败，请手动复制';}
-                }
-            }
-        });
-    }
-
-    if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',initPromoteModal);}else{initPromoteModal();}
-    document.addEventListener('ab:pageload',initPromoteModal);
-})();
-</script>
 HTML));
 
                 $abPromoHidden = new Text(
                         'abPromoHidden',
                         null,
                         '0',
-                        _t('AB Admin 推广开关（隐藏字段）'),
+                        _t('AB Admin 分享开关（隐藏字段）'),
                         _t('内部使用')
                 );
                 $abPromoHidden->input->setAttribute('type', 'hidden');
                 $form->addInput($abPromoHidden);
 
                 $form->addItem(new HtmlElement(self::buildAbPromoHtml()));
+
+                // 设置摘要卡片（当前方案、规则、插件一览）
+                $form->addItem(new HtmlElement(self::buildSummaryCardHtml()));
 
         // 1. 当前使用的方案名
         $defaultProfile = new Text(
@@ -953,35 +941,7 @@ HTML));
         );
         $form->addInput($storagePathTemplate);
 
-        // 2. 图形化配置编辑器
-        $drivers     = self::getDrivers();
-        $driversMeta = [];
-        foreach ($drivers as $key => $class) {
-            $driversMeta[$key] = [
-                'name'   => $class::getName(),
-                'fields' => $class::getConfigFields(),
-            ];
-        }
-
-        // 扩展元数据（含可用性检测）
-        $extClasses    = self::getExtensions();
-        $extensionsMeta = [];
-        foreach ($extClasses as $key => $class) {
-            $missingExts = [];
-            foreach ($class::getRequiredPhpExtensions() as $phpExt) {
-                if (!extension_loaded($phpExt)) {
-                    $missingExts[] = $phpExt;
-                }
-            }
-            $extensionsMeta[$key] = [
-                'name'        => $class::getName(),
-                'description' => $class::getDescription(),
-                'available'   => $class::isAvailable(),
-                'missingExts' => $missingExts,
-                'fields'      => $class::getConfigFields(),
-            ];
-        }
-
+        // 2. 图形化配置编辑器（复用上方已计算的 $driversMeta 和 $extensionsMeta）
         $form->addItem(new HtmlElement(self::buildGuiHtml($driversMeta, $extensionsMeta)));
 
         // 文件接管范围（全局，不随方案切换）—— 保持原始 addInput 顺序不变
@@ -1065,9 +1025,40 @@ HTML));
         } catch (\Throwable $e) {
             // ignore
         }
+
+        // ── 外置 JS（放最后，确保 DOM 已渲染）──
+        $form->addItem(new HtmlElement(
+            '<script src="' . $assetsUrl . '/js/picup-config.js"></script>'
+        ));
     }
 
     public static function personalConfig(Form $form) {}
+
+        /**
+         * 构建设置摘要卡片（当前方案、驱动、插件一览），在全局设置上方。
+         * CSS/JS 已外置至 assets/，PHP 数据通过 window.__PICUP__ 注入。
+         */
+        private static function buildSummaryCardHtml(): string
+        {
+            return <<<HTML
+<ul class="typecho-option" id="typecho-option-item-picup-summary"><li>
+<div id="picup-summary-card" class="picup-summary-card">
+  <div class="psc-head">
+    <span class="psc-title">设置摘要</span>
+    <span class="psc-badge" id="psc-badge">—</span>
+  </div>
+  <div class="psc-grid" id="psc-grid">
+    <div class="psc-item"><span class="psc-label">当前方案</span><span class="psc-value" id="psc-profile">—</span></div>
+    <div class="psc-item"><span class="psc-label">上传驱动</span><span class="psc-value" id="psc-driver">—</span></div>
+    <div class="psc-item"><span class="psc-label">接管范围</span><span class="psc-value" id="psc-scope">—</span></div>
+    <div class="psc-item"><span class="psc-label">启用插件</span><span class="psc-value psc-ext" id="psc-exts">—</span></div>
+    <div class="psc-item psc-full"><span class="psc-label">后缀规则</span><div class="psc-rules" id="psc-rules">—</div></div>
+    <div class="psc-item psc-full"><span class="psc-label">服务器环境</span><div class="psc-env-wrap" id="psc-env-wrap"></div></div>
+  </div>
+</div>
+</li></ul>
+HTML;
+        }
 
         /**
          * 构建 AB Admin 图文推广面板（可关闭并可从推荐卡重新打开）。
@@ -1077,44 +1068,6 @@ HTML));
                 return <<<'HTML'
 <ul class="typecho-option" id="typecho-option-item-picup-ab-promo"><li>
 <div id="picup-ab-promo-panel" class="picup-ab-promo-panel">
-<style>
-#typecho-option-item-abPromoHidden{display:none!important;}
-.picup-ab-promo-panel{
-    max-width:1080px!important;margin:4px auto 16px!important;padding:14px!important;
-    border:1px solid #f59e0b!important;border-radius:12px!important;background:#fffbeb!important;
-}
-.picup-ab-promo-head{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:10px!important;margin-bottom:10px!important;}
-.picup-ab-promo-title{margin:0!important;font-size:15px!important;font-weight:700!important;color:#92400e!important;}
-.picup-ab-promo-close{
-    border:1px solid #f59e0b!important;background:#fff!important;color:#92400e!important;
-    border-radius:9999px!important;padding:5px 12px!important;font-size:12px!important;font-weight:600!important;cursor:pointer!important;
-}
-.picup-ab-promo-close:hover{background:#ffedd5!important;}
-.picup-ab-promo-tip{margin:0 0 12px!important;font-size:12px!important;color:#78350f!important;line-height:1.6!important;}
-.picup-ab-promo-grid{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px!important;}
-.picup-ab-promo-item{
-    border:1px solid #fcd34d!important;border-radius:10px!important;background:#fff!important;
-    padding:10px!important;box-sizing:border-box!important;
-}
-.picup-ab-promo-item h5{margin:0 0 6px!important;font-size:13px!important;color:#92400e!important;}
-.picup-ab-promo-item p{margin:0 0 8px!important;font-size:12px!important;color:#78350f!important;line-height:1.5!important;}
-.picup-ab-promo-shot{display:block!important;border-radius:8px!important;overflow:hidden!important;border:1px solid #fed7aa!important;background:#fff!important;cursor:zoom-in!important;padding:0!important;appearance:none!important;}
-.picup-ab-promo-shot img{display:block!important;width:100%!important;height:auto!important;object-fit:cover!important;}
-.picup-ab-fullscreen{position:fixed!important;inset:0!important;z-index:2147483000!important;background:rgba(0,0,0,.92)!important;display:none!important;align-items:center!important;justify-content:center!important;padding:18px!important;box-sizing:border-box!important;}
-.picup-ab-fullscreen.is-open{display:flex!important;}
-.picup-ab-fullscreen img{max-width:100%!important;max-height:100%!important;object-fit:contain!important;box-shadow:0 8px 40px rgba(0,0,0,.45)!important;border-radius:8px!important;}
-.picup-ab-fullscreen-close{position:absolute!important;top:14px!important;right:14px!important;border:1px solid rgba(255,255,255,.35)!important;background:rgba(0,0,0,.3)!important;color:#fff!important;border-radius:9999px!important;padding:6px 12px!important;font-size:12px!important;font-weight:600!important;cursor:pointer!important;}
-[data-theme="dark"] .picup-ab-fullscreen-close{border-color:rgba(255,255,255,.45)!important;}
-[data-theme="dark"] .picup-ab-promo-panel{border-color:#92400e!important;background:#2c1a00!important;}
-[data-theme="dark"] .picup-ab-promo-title{color:#fbbf24!important;}
-[data-theme="dark"] .picup-ab-promo-tip{color:#fcd34d!important;}
-[data-theme="dark"] .picup-ab-promo-close{border-color:#b45309!important;background:#3a2100!important;color:#fbbf24!important;}
-[data-theme="dark"] .picup-ab-promo-item{border-color:#92400e!important;background:#3a2100!important;}
-[data-theme="dark"] .picup-ab-promo-item h5{color:#fbbf24!important;}
-[data-theme="dark"] .picup-ab-promo-item p{color:#fcd34d!important;}
-[data-theme="dark"] .picup-ab-promo-shot{border-color:#92400e!important;background:#2c1a00!important;}
-@media(max-width:900px){.picup-ab-promo-grid{grid-template-columns:1fr!important;}}
-</style>
     <div class="picup-ab-promo-head">
         <h4 class="picup-ab-promo-title">为什么推荐深度适配 PicUp 的插件 AB-Admin ？</h4>
         <button type="button" id="picup-ab-promo-close" class="picup-ab-promo-close">不再显示</button>
@@ -1159,107 +1112,6 @@ HTML));
         </div>
     </div>
 </div>
-<script>
-(function(){
-    function ensureViewer(){
-        var viewer=document.getElementById('picup-ab-promo-viewer');
-        if(viewer){return viewer;}
-        viewer=document.createElement('div');
-        viewer.id='picup-ab-promo-viewer';
-        viewer.className='picup-ab-fullscreen';
-        viewer.innerHTML=''
-            + '<button type="button" class="picup-ab-fullscreen-close" aria-label="关闭预览">关闭(Esc)</button>'
-            + '<img alt="AB Admin 图片预览" src="">';
-        (document.body||document.documentElement).appendChild(viewer);
-
-        var closeBtn=viewer.querySelector('.picup-ab-fullscreen-close');
-        var img=viewer.querySelector('img');
-
-        function closeViewer(){
-            viewer.classList.remove('is-open');
-            if(img){img.src='';}
-            document.documentElement.style.overflow='';
-        }
-
-        viewer.addEventListener('click',function(e){
-            if(e.target===viewer){closeViewer();}
-        });
-        if(closeBtn){closeBtn.addEventListener('click',closeViewer);}
-
-        document.addEventListener('keydown',function(e){
-            if(e.key==='Escape'&&viewer.classList.contains('is-open')){
-                closeViewer();
-            }
-        });
-
-        viewer.__open=function(src,alt){
-            if(!img){return;}
-            img.src=src;
-            img.alt=alt||'AB Admin 推广图预览';
-            viewer.classList.add('is-open');
-            document.documentElement.style.overflow='hidden';
-        };
-        return viewer;
-    }
-
-    function bindShots(){
-        var viewer=ensureViewer();
-        var shots=document.querySelectorAll('.picup-ab-promo-shot[data-full-src]');
-        shots.forEach(function(btn){
-            if(btn.dataset.bound==='1'){return;}
-            btn.dataset.bound='1';
-            btn.addEventListener('click',function(){
-                var img=btn.querySelector('img');
-                var src=btn.getAttribute('data-full-src')||'';
-                var alt=img?img.getAttribute('alt')||'':'';
-                if(src&&viewer&&typeof viewer.__open==='function'){
-                    viewer.__open(src,alt);
-                }
-            });
-        });
-    }
-
-    function setup(){
-        var panel=document.getElementById('picup-ab-promo-panel');
-        var openBtn=document.getElementById('picup-ab-promo-open');
-        var closeBtn=document.getElementById('picup-ab-promo-close');
-        var status=document.getElementById('picup-ab-promo-status');
-        var hiddenInput=document.querySelector('input[name="abPromoHidden"]');
-        if(!panel||!openBtn||!hiddenInput){return;}
-
-        var row=hiddenInput.closest('li');
-        if(row){row.style.display='none';}
-
-        function syncByValue(){
-            var hidden=String(hiddenInput.value||'0')==='1';
-            panel.style.display=hidden?'none':'block';
-            openBtn.textContent=hidden?'查看详情':'隐藏图文';
-            // if(status){
-            //     status.textContent=hidden?'你已关闭图文推广，可随时重新打开。':'';
-            // }
-        }
-
-        openBtn.addEventListener('click',function(){
-            var hidden=String(hiddenInput.value||'0')==='1';
-            hiddenInput.value=hidden?'0':'1';
-            syncByValue();
-        });
-
-        if(closeBtn){
-            closeBtn.addEventListener('click',function(){
-                hiddenInput.value='1';
-                syncByValue();
-            });
-        }
-
-        bindShots();
-        syncByValue();
-    }
-
-    if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',setup);}else{setup();}
-    document.addEventListener('ab:pageload',setup);
-})();
-</script>
 </li></ul>
 HTML;
         }
@@ -1302,14 +1154,6 @@ HTML;
         $verDisplay = htmlspecialchars($opensslVer);
 
         return <<<HTML
-<style>
-.picup-ssl-warn{display:flex;align-items:flex-start;gap:12px;padding:14px 18px;margin:0 0 16px;border-radius:8px;border:1px solid #f97316;background:#fff7ed;color:#7c2d12;font-size:13px;line-height:1.6;}
-.picup-ssl-warn .picup-ssl-icon{font-size:22px;flex-shrink:0;margin-top:1px;}
-.picup-ssl-warn strong{color:#9a3412;}
-.picup-ssl-warn code{background:#fed7aa;padding:1px 5px;border-radius:4px;font-size:12px;}
-.picup-ssl-warn ul{margin:4px 0 0 18px;padding:0;}
-.picup-ssl-warn ul li{margin:2px 0;}
-</style>
 <div class="picup-ssl-warn">
   <span class="picup-ssl-icon">⚠️</span>
   <div>
@@ -1357,15 +1201,6 @@ HTML;
         }
 
         return <<<'HTML'
-<style>
-.picup-db-warn{display:flex;align-items:flex-start;gap:12px;padding:14px 18px;margin:0 0 16px;
-  border-radius:8px;border:1px solid #dc2626;background:#fef2f2;color:#7f1d1d;font-size:13px;line-height:1.6;}
-.picup-db-warn .picup-db-icon{font-size:22px;flex-shrink:0;margin-top:1px;}
-.picup-db-warn strong{color:#991b1b;}
-.picup-db-warn code{background:#fecaca;padding:1px 5px;border-radius:4px;font-size:12px;}
-.picup-db-warn ol{margin:6px 0 0 18px;padding:0;}
-.picup-db-warn ol li{margin:3px 0;}
-</style>
 <div class="picup-db-warn">
   <span class="picup-db-icon">🗄️</span>
   <div>
@@ -2304,75 +2139,12 @@ HTML;
 <ul class="typecho-option" id="typecho-option-item-picup-backup"><li>
 <label class="typecho-label">配置备份 (先保存设置后备份)</label>
 <div id="picup-backup-wrap" data-url="{$ajaxUrlEsc}" data-token="{$tokenEsc}">
-<style>
-#picup-backup-wrap{padding:16px;max-width:800px!important;margin:0 auto!important;}
-.pb-toolbar{display:flex!important;gap:8px!important;flex-wrap:wrap!important;align-items:center!important;margin-bottom:12px!important;}
-.pb-btn{
-    padding:6px 14px!important;min-height:32px!important;border:none!important;border-radius:20px!important;font-size:12px!important;
-    cursor:pointer!important;white-space:nowrap!important;font-weight:500!important;letter-spacing:.02em!important;
-    transition:opacity .15s,box-shadow .15s!important;
-    display:inline-flex!important;align-items:center!important;gap:4px!important;
-    box-sizing:border-box!important;
-}
-#typecho-option-item-configJson-3 li{padding:16px;}
-.pb-btn:hover{opacity:.88!important;box-shadow:0 1px 4px rgba(0,0,0,.15)!important;}
-.pb-btn:active{transform:scale(.97)!important;}
-.pb-btn-primary{background:var(--md-primary,#6750a4)!important;color:var(--md-on-primary,#fff)!important;}
-.pb-btn-restore{background:var(--md-primary-container,#eaddff)!important;color:var(--md-on-surface,#1c1b1f)!important;}
-.pb-btn-del{background:var(--md-error,#b3261e)!important;color:#fff!important;}
-.pb-btn:disabled{opacity:.4!important;cursor:not-allowed!important;box-shadow:none!important;}
-.pb-label-wrap{display:flex!important;align-items:center!important;gap:6px!important;}
-.pb-label-inp{
-    border:1px solid var(--md-outline,#79747e)!important;
-    border-radius:6px!important;padding:5px 9px!important;font-size:12px!important;min-width:180px!important;
-    color:var(--md-on-surface,#1c1b1f)!important;
-    background:var(--md-surface,#fffbfe)!important;
-    transition:border-color .15s!important;outline:none!important;
-    box-sizing:border-box!important;
-}
-.pb-label-inp:focus{border-color:var(--md-primary,#6750a4)!important;box-shadow:0 0 0 3px rgba(103,80,164,.15)!important;}
-.pb-list{border:1px solid var(--md-outline-variant,#cac4d0)!important;border-radius:8px!important;overflow:hidden!important;margin-top:4px!important;}
-.pb-list-head{
-    display:grid!important;grid-template-columns:1fr 110px 90px 86px!important;gap:0!important;
-    background:var(--md-surface-container,#f3edf7)!important;
-    font-size:12px!important;font-weight:600!important;
-    color:var(--md-on-surface-variant,#49454f)!important;
-    padding:7px 10px!important;
-}
-.pb-list-row{
-    display:grid!important;grid-template-columns:1fr 110px 90px 86px!important;gap:0!important;
-    font-size:12px!important;padding:7px 10px!important;
-    border-top:1px solid var(--md-outline-variant,#cac4d0)!important;
-    align-items:center!important;color:var(--md-on-surface,#1c1b1f)!important;
-    transition:background .1s!important;
-}
-.pb-list-row:hover{background:var(--md-surface-container-low,#f7f2fa)!important;}
-.pb-row-label{font-weight:500!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;padding-right:6px!important;}
-.pb-row-date{color:var(--md-on-surface-variant,#49454f)!important;font-size:11px!important;}
-.pb-row-profile{color:var(--md-primary,#6750a4)!important;font-size:11px!important;font-weight:600!important;}
-.pb-row-actions{display:flex!important;gap:4px!important;}
-.pb-empty{padding:20px!important;text-align:center!important;color:var(--md-on-surface-variant,#49454f)!important;font-size:13px!important;}
-.pb-status{margin:8px 0 0!important;font-size:12px!important;min-height:18px!important;color:var(--md-primary,#6750a4)!important;}
-[data-theme="dark"] .pb-list{border-color:var(--md-dark-outline-variant,#49454f)!important;}
-[data-theme="dark"] .pb-list-head{background:var(--md-dark-surface-container,#2b2930)!important;color:var(--md-dark-on-surface-variant,#cac4d0)!important;}
-[data-theme="dark"] .pb-list-row{border-top-color:var(--md-dark-outline-variant,#49454f)!important;color:var(--md-dark-on-surface,#e6e1e5)!important;}
-[data-theme="dark"] .pb-list-row:hover{background:var(--md-dark-surface,#1c1b1f)!important;}
-[data-theme="dark"] .pb-label-inp{border-color:var(--md-dark-outline,#938f99)!important;background:var(--md-dark-surface,#1c1b1f)!important;color:var(--md-dark-on-surface,#e6e1e5)!important;}
-[data-theme="dark"] .pb-row-date{color:var(--md-dark-on-surface-variant,#cac4d0)!important;}
-[data-theme="dark"] .pb-row-profile{color:var(--md-dark-primary,#d0bcff)!important;}
-[data-theme="dark"] .pb-status{color:var(--md-dark-primary,#d0bcff)!important;}
-[data-theme="dark"] .pb-btn-restore{background:#3a2f56!important;color:var(--md-dark-on-surface,#e6e1e5)!important;}
-@media(max-width:600px){
-  .pb-list-head,.pb-list-row{grid-template-columns:1fr 80px 70px!important;}
-  .pb-head-profile,.pb-row-profile{display:none!important;}
-}
-</style>
 <div class="pb-toolbar">
   <div class="pb-label-wrap">
     <input type="text" id="pb-label-inp" class="pb-label-inp" placeholder="备份名称（留空自动生成）">
   </div><br/>
   <button type="button" class="pb-btn pb-btn-primary" id="pb-backup-btn">备份当前配置</button>
-  <button type="button" class="pb-btn pb-btn-restore" id="pb-restore-btn" disabled>↩ 从数据库中恢复</button>
+  <button type="button" class="pb-btn pb-btn-restore" id="pb-restore-btn" disabled>恢复选中备份</button>
   <button type="button" class="pb-btn pb-btn-del" id="pb-del-btn" disabled>删除备份</button>
 </div>
 <div id="pb-list-wrap">
@@ -2380,97 +2152,6 @@ HTML;
 </div>
 <p class="pb-status" id="pb-status"></p>
 </div>
-<script>
-(function(){
-  var wrap=document.getElementById('picup-backup-wrap');
-  var url=wrap.dataset.url; var token=wrap.dataset.token; var selId=0;
-  var btnBackup=document.getElementById('pb-backup-btn');
-  var btnRestore=document.getElementById('pb-restore-btn');
-  var btnDel=document.getElementById('pb-del-btn');
-  var status=document.getElementById('pb-status');
-  var labelInp=document.getElementById('pb-label-inp');
-  function post(doName,extra,cb){
-    var fd=new FormData(); fd.append('do',doName); fd.append('_',token);
-    if(extra) Object.keys(extra).forEach(function(k){ fd.append(k,extra[k]); });
-    fetch(url,{method:'POST',body:fd}).then(function(r){return r.json();}).then(cb)
-      .catch(function(e){setStatus('请求失败：'+e,true);});
-  }
-  function setStatus(msg,isErr){
-    status.style.color=isErr?'#b3261e':'#6750a4'; status.textContent=msg;
-    if(!isErr) setTimeout(function(){if(status.textContent===msg)status.textContent='';},3500);
-  }
-  function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
-  function renderList(list){
-    var w=document.getElementById('pb-list-wrap');
-    if(!list||!list.length){w.innerHTML='<div class="pb-empty">暂无备份记录</div>';selId=0;updateBtns();return;}
-    var html='<div class="pb-list"><div class="pb-list-head"><span>备份名称</span><span>备份时间</span><span>使用方案</span><span></span></div>';
-    list.forEach(function(row){
-      var isSel=(parseInt(row.id)===selId);
-      html+='<div class="pb-list-row" data-id="'+row.id+'" style="'+(isSel?'background:#f3f0fb;outline:2px solid #6750a4;outline-offset:-2px;border-radius:4px;':'')+'">'
-        +'<span class="pb-row-label" title="'+esc(row.label)+'">'+esc(row.label)+'</span>'
-        +'<span class="pb-row-date">'+esc(row.backup_date)+'</span>'
-        +'<span class="pb-row-profile">'+esc(row.default_profile)+'</span>'
-        +'<span class="pb-row-actions"></span></div>';
-    });
-    html+='</div>';
-    w.innerHTML=html;
-    w.querySelectorAll('.pb-list-row').forEach(function(el){
-      el.style.cursor='pointer';
-      el.addEventListener('click',function(){selId=parseInt(this.dataset.id);renderList(list);updateBtns();});
-    });
-  }
-  function updateBtns(){var has=selId>0;btnRestore.disabled=!has;btnDel.disabled=!has;}
-  function loadList(){
-    post('list',{},function(res){
-      if(res.code===0){renderList(res.data.list||[]);}
-      else{document.getElementById('pb-list-wrap').innerHTML='<div class="pb-empty">加载失败：'+esc(res.message)+'</div>';}
-    });
-  }
-  btnBackup.addEventListener('click',function(){
-    var label=labelInp.value.trim(); btnBackup.disabled=true;
-    post('backup',label?{label:label}:{},function(res){
-      btnBackup.disabled=false;
-      if(res.code===0){setStatus('✅ '+res.message);labelInp.value='';selId=res.data.id||0;loadList();}
-      else{setStatus('❌ '+res.message,true);}
-    });
-  });
-  btnRestore.addEventListener('click',function(){
-    if(!selId) return;
-    picupDialog('confirm','确定要从该备份中恢复配置吗？\\n当前未保存的修改将被覆盖，恢复后请点击页面下方的「保存设置」。').then(function(ok){
-      if(!ok) return;
-      post('restore',{id:selId},function(res){
-        if(res.code===0){
-          setStatus('✅ '+res.message);
-          var ta=document.querySelector('textarea[name="configJson"]');
-          var dp=document.querySelector('input[name="defaultProfile"]');
-          if(ta&&res.data.config_json){ta.value=res.data.config_json;ta.dispatchEvent(new Event('blur'));}
-          if(dp&&res.data.default_profile){dp.value=res.data.default_profile;}
-        } else {setStatus('❌ '+res.message,true);}
-      });
-    });
-  });
-  btnDel.addEventListener('click',function(){
-    if(!selId) return;
-    picupDialog('confirm','确定删除此条备份？\\n此操作不可撤销。').then(function(ok){
-      if(!ok) return;
-      post('delete',{id:selId},function(res){
-        if(res.code===0){setStatus('✅ 删除成功');selId=0;loadList();}
-        else{setStatus('❌ '+res.message,true);}
-      });
-    });
-  });
-  // AdminBeautify AJAX 导航适配：监听 ab:pageload 事件，支持无刷新页面切换
-  // （脚本中含 'ab:pageload' 字符串，可通过 AdminBeautify 兼容性检测，不再弹出警告）
-  if(window._pbNavHandler) document.removeEventListener('ab:pageload',window._pbNavHandler);
-  window._pbNavHandler=function(){ var el=document.getElementById('picup-backup-wrap'); if(el) loadList(); };
-  document.addEventListener('ab:pageload',window._pbNavHandler);
-  // 常规初始化路径（AdminBeautify AJAX 导航激活时由 ab:pageload 驱动，避免重复加载）
-  if(!window.AdminBeautify||!window.AdminBeautify._ajaxNavActive){
-    if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',loadList);}
-    else{loadList();}
-  }
-})();
-</script>
 </li></ul>
 HTML;
     }
@@ -2484,791 +2165,16 @@ HTML;
 <ul class="typecho-option" id="typecho-option-item-picup-suffix-gui"><li>
 <label class="typecho-label">后缀自定义方案编辑器</label>
 <div id="picup-suffix-gui">
-<style>
-#picup-suffix-gui{max-width:800px;margin:0 auto;padding:12px 16px;background:var(--md-surface-container-low,#f7f2fa);border:1px solid var(--md-outline-variant,#cac4d0);border-radius:8px;}
-.ps-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;}
-.ps-row input[type="text"]{flex:1;min-width:120px;padding:6px 10px;border:1px solid var(--md-outline,#79747e);border-radius:6px;font-size:13px;font-family:monospace;background:var(--md-surface,#fffbfe);color:var(--md-on-surface,#1c1b1f);}
-.ps-row select{min-width:120px;padding:6px 10px;border:1px solid var(--md-outline,#79747e);border-radius:6px;font-size:13px;background:var(--md-surface,#fffbfe);color:var(--md-on-surface,#1c1b1f);}
-.ps-del-btn{padding:4px 10px;border:none;border-radius:16px;background:var(--md-error,#b3261e);color:#fff;font-size:12px;cursor:pointer;white-space:nowrap;}
-.ps-del-btn:hover{opacity:.85;}
-.ps-add-btn{padding:6px 14px;border:none;border-radius:16px;background:var(--md-primary,#6750a4);color:#fff;font-size:12px;font-weight:500;cursor:pointer;margin-top:4px;}
-.ps-add-btn:hover{opacity:.88;}
-.ps-hint{font-size:12px;color:var(--md-on-surface-variant,#49454f);margin:8px 0 0;}
-.ps-empty{font-size:13px;color:var(--md-on-surface-variant,#49454f);padding:8px 0;}
-[data-theme="dark"] #picup-suffix-gui{background:var(--md-dark-surface-container,#2b2930);border-color:var(--md-dark-outline-variant,#49454f);}
-[data-theme="dark"] .ps-row input[type="text"],[data-theme="dark"] .ps-row select{background:var(--md-dark-surface,#1c1b1f);border-color:var(--md-dark-outline,#938f99);color:var(--md-dark-on-surface,#e6e1e5);}
-[data-theme="dark"] .ps-hint,[data-theme="dark"] .ps-empty{color:var(--md-dark-on-surface-variant,#cac4d0);}
-</style>
 <div id="ps-list"></div>
 <button type="button" class="ps-add-btn" id="ps-add-btn">+ 添加后缀映射</button>
 <p class="ps-hint">每行指定一组文件后缀（逗号分隔，如 <code>jpg,jpeg,png</code>）及其对应的上传方案。修改实时同步到下方 JSON。</p>
 </div>
-<script>
-(function(){
-    var listWrap=document.getElementById('ps-list');
-    var addBtn=document.getElementById('ps-add-btn');
-    var ta=document.querySelector('textarea[name="suffixProfiles"]');
-    if(!ta) return;
-
-    function getProfileKeys(){
-        var cfgTa=document.querySelector('textarea[name="configJson"]');
-        if(!cfgTa) return [];
-        try{return Object.keys(JSON.parse(cfgTa.value)||{});}catch(e){return [];}
-    }
-
-    function getMapping(){
-        try{return JSON.parse(ta.value)||{};}catch(e){return {};}
-    }
-    function saveMapping(m){
-        ta.value=JSON.stringify(m,null,2);
-    }
-
-    function render(){
-        var m=getMapping();
-        var keys=Object.keys(m);
-        var profiles=getProfileKeys();
-        listWrap.innerHTML='';
-        if(!keys.length){
-            var empty=document.createElement('div');empty.className='ps-empty';
-            empty.textContent='暂无后缀映射规则，点击下方按钮添加。';
-            listWrap.appendChild(empty);
-            return;
-        }
-        keys.forEach(function(suffixes){
-            var profileName=m[suffixes]||'';
-            var row=document.createElement('div');row.className='ps-row';
-
-            var inp=document.createElement('input');inp.type='text';inp.value=suffixes;
-            inp.placeholder='后缀名，如 jpg,jpeg,png';
-            inp.title='文件后缀名（逗号分隔，不含点号）';
-            row.appendChild(inp);
-
-            var sel=document.createElement('select');
-            var optEmpty=document.createElement('option');optEmpty.value='';optEmpty.textContent='— 选择方案 —';
-            sel.appendChild(optEmpty);
-            profiles.forEach(function(p){
-                var o=document.createElement('option');o.value=p;o.textContent=p;
-                if(p===profileName)o.selected=true;
-                sel.appendChild(o);
-            });
-            if(profileName&&profiles.indexOf(profileName)===-1){
-                var oMissing=document.createElement('option');oMissing.value=profileName;
-                oMissing.textContent=profileName+' (已删除)';oMissing.selected=true;
-                oMissing.style.color='#b3261e';sel.appendChild(oMissing);
-            }
-            row.appendChild(sel);
-
-            var del=document.createElement('button');del.type='button';del.className='ps-del-btn';
-            del.textContent='删除';
-            row.appendChild(del);
-
-            listWrap.appendChild(row);
-
-            function sync(){
-                var nm=getMapping();
-                var oldKey=suffixes;
-                var newKey=inp.value.trim();
-                var newVal=sel.value;
-                if(oldKey!==newKey) delete nm[oldKey];
-                if(newKey) nm[newKey]=newVal;
-                saveMapping(nm);
-            }
-            inp.addEventListener('change',function(){sync();suffixes=inp.value.trim();});
-            inp.addEventListener('input',function(){sync();suffixes=inp.value.trim();});
-            sel.addEventListener('change',sync);
-            del.addEventListener('click',function(){
-                var nm=getMapping();delete nm[suffixes];saveMapping(nm);render();
-            });
-        });
-    }
-
-    addBtn.addEventListener('click',function(){
-        var m=getMapping();m['']='';;saveMapping(m);render();
-        var rows=listWrap.querySelectorAll('.ps-row');
-        if(rows.length){var lastInp=rows[rows.length-1].querySelector('input');if(lastInp)lastInp.focus();}
-    });
-
-    ta.addEventListener('blur',render);
-    /* 监听 configJson 变化以更新方案下拉列表 */
-    var cfgTa=document.querySelector('textarea[name="configJson"]');
-    if(cfgTa) cfgTa.addEventListener('blur',render);
-
-    if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',render);}
-    else{render();}
-    document.addEventListener('ab:pageload',render);
-})();
-</script>
 </li></ul>
 HTML;
     }
 
     private static function buildGuiHtml(array $driversMeta, array $extensionsMeta = []): string
     {
-        $driversJson    = json_encode($driversMeta,    JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT);
-        $extensionsJson = json_encode($extensionsMeta, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT);
-
-        // nowdoc，避免 $ 被 PHP 插值
-        $js = <<<'EOJS'
-(function(){
-    var DRIVERS=__DRIVERS_JSON__;
-    var EXTENSIONS=__EXTENSIONS_JSON__;
-    var profileSel  = document.getElementById('picup-profile-sel');
-    var formDiv     = document.getElementById('picup-profile-form');
-    var extSection  = document.getElementById('picup-ext-section');
-    var addBtn      = document.getElementById('picup-add-btn');
-    var renameBtn   = document.getElementById('picup-rename-btn');
-    var delBtn      = document.getElementById('picup-del-btn');
-    var applyBtn    = document.getElementById('picup-apply-btn');
-    var jsonTA      = null;
-
-    function getTA(){
-        if(!jsonTA) jsonTA=document.querySelector('textarea[name="configJson"]');
-        return jsonTA;
-    }
-    function getProfiles(){
-        try{ return JSON.parse(getTA().value)||{}; }catch(e){ return {}; }
-    }
-    function saveProfiles(p){ getTA().value=JSON.stringify(p,null,2); }
-
-    /* ── 只显示方案名 ── */
-    function renderSelect(profiles, selected){
-        profileSel.innerHTML='';
-        var keys=Object.keys(profiles);
-        if(!keys.length){
-            var ph=document.createElement('option');
-            ph.value='';ph.textContent='(\u65e0\u65b9\u6848)';ph.disabled=true;
-            profileSel.appendChild(ph);
-            return;
-        }
-        keys.forEach(function(k){
-            var o=document.createElement('option');
-            o.value=k; o.textContent=k;
-            if(k===selected) o.selected=true;
-            profileSel.appendChild(o);
-        });
-    }
-
-    /* ── 构建单个输入控件 ── */
-    function buildInput(fk, fd, curVal, dataAttr, dataAttrVal){
-        var inp;
-        if(fd.type==='select'&&fd.options){
-            inp=document.createElement('select');inp.className='picup-ctrl picup-input';
-            Object.keys(fd.options).forEach(function(v){
-                var o=document.createElement('option');o.value=v;o.textContent=fd.options[v];
-                var cur=curVal!=null?curVal:fd['default'];
-                if(cur===v||String(cur)===String(v)) o.selected=true;
-                inp.appendChild(o);
-            });
-        } else {
-            inp=document.createElement('input');
-            inp.type=fd.type==='password'?'password':(fd.type==='number'?'number':'text');
-            inp.value=curVal!=null?curVal:(fd['default']||'');
-            inp.className='picup-ctrl picup-input';
-            inp.placeholder=fd['default']||'';
-        }
-        inp.dataset[dataAttr]=dataAttrVal||fk;
-        return inp;
-    }
-
-    /* ── 渲染驱动字段 ── */
-    function renderForm(profile){
-        formDiv.innerHTML='';
-        if(!profile) return;
-        var driverKey=profile.driver||'';
-
-        /* 驱动选择行 */
-        var dRow=document.createElement('div');dRow.className='picup-field-row';
-        var dLeft=document.createElement('div');dLeft.className='picup-field-left';
-        var dLbl=document.createElement('label');dLbl.className='picup-field-label';
-        dLbl.textContent='\u9a71\u52a8\u7c7b\u578b *';
-        dLeft.appendChild(dLbl);
-        var dSel=document.createElement('select');dSel.className='picup-ctrl picup-input';
-        dSel.dataset.field='driver';
-        Object.keys(DRIVERS).forEach(function(k){
-            var o=document.createElement('option');
-            o.value=k; o.textContent=DRIVERS[k].name;
-            if(k===driverKey) o.selected=true;
-            dSel.appendChild(o);
-        });
-        dLeft.appendChild(dSel);
-        dRow.appendChild(dLeft);
-        formDiv.appendChild(dRow);
-
-        /* 驱动专属字段 */
-        if(DRIVERS[driverKey]){
-            var fields=DRIVERS[driverKey].fields;
-            Object.keys(fields).forEach(function(fk){
-                var fd=fields[fk];
-                var row=document.createElement('div');row.className='picup-field-row';
-                var left=document.createElement('div');left.className='picup-field-left';
-                var lbl=document.createElement('label');lbl.className='picup-field-label';
-                lbl.textContent=(fd.label||fk)+(fd.required?' *':'');
-                left.appendChild(lbl);
-                var inp=buildInput(fk,fd,profile[fk]!=null?profile[fk]:null,'field',fk);
-                left.appendChild(inp);
-                if(fd.description){
-                    var desc=document.createElement('p');desc.className='picup-field-desc picup-hint';
-                    desc.textContent=fd.description;left.appendChild(desc);
-                }
-                row.appendChild(left);formDiv.appendChild(row);
-            });
-        }
-
-        formDiv.querySelectorAll('[data-field]').forEach(function(el){
-            el.addEventListener('change', syncDriverFields);
-            el.addEventListener('input', debounce(syncDriverFields,300));
-        });
-        dSel.addEventListener('change',function(){
-            var p=getProfiles();var n=profileSel.value;
-            if(p[n]){p[n].driver=this.value;saveProfiles(p);renderForm(p[n]);}
-        });
-
-        /* 渲染扩展面板 */
-        renderExtensions(profile);
-    }
-
-    /* ── 渲染扩展面板 ── */
-    function renderExtensions(profile){
-        extSection.innerHTML='';
-        if(!EXTENSIONS||!Object.keys(EXTENSIONS).length) return;
-
-        var extConf = (profile&&profile._extensions&&typeof profile._extensions==='object')
-            ? profile._extensions : {};
-
-        /* 分隔线 + 标题 */
-        var sep=document.createElement('div');sep.className='picup-section-sep';extSection.appendChild(sep);
-        var title=document.createElement('div');title.className='picup-section-title';
-        title.innerHTML='<span>\u63d2\u4ef6\u6269\u5c55</span><small class="picup-hint"> \u2014 \u6bcf\u4e2a\u65b9\u6848\u72ec\u7acb\u914d\u7f6e</small>';
-        extSection.appendChild(title);
-
-        Object.keys(EXTENSIONS).forEach(function(key){
-            var ext=EXTENSIONS[key];
-            var conf=extConf[key]&&typeof extConf[key]==='object'?extConf[key]:{};
-            var enabled=conf.enabled===true||conf.enabled==='true';
-
-            var card=document.createElement('div');card.className='picup-ext-card'+(enabled?' picup-ext-open':'');
-
-            /* ── 头部行：checkbox + 名称 + badge + 描述 ── */
-            var header=document.createElement('div');header.className='picup-ext-header';
-
-            var toggleLabel=document.createElement('label');toggleLabel.className='picup-ext-toggle-label';
-            var cb=document.createElement('input');cb.type='checkbox';cb.className='picup-ext-cb';
-            cb.dataset.extKey=key;cb.checked=enabled;
-            if(!ext.available){cb.disabled=true;}
-            toggleLabel.appendChild(cb);
-
-            var nameSpan=document.createElement('span');nameSpan.className='picup-ext-name';
-            nameSpan.textContent=ext.name;
-            toggleLabel.appendChild(nameSpan);
-            header.appendChild(toggleLabel);
-
-            /* 可用性 badge */
-            if(ext.available){
-                var avail=document.createElement('span');avail.className='picup-ext-badge picup-ext-ok';
-                avail.textContent='\u53ef\u7528';header.appendChild(avail);
-            } else {
-                var unavail=document.createElement('span');unavail.className='picup-ext-badge picup-ext-unavail';
-                unavail.title='\u7f3a\u5c11 PHP \u6269\u5c55: '+ext.missingExts.join(', ');
-                unavail.textContent='\u4e0d\u53ef\u7528 \u2014 \u7f3a '+ext.missingExts.join(', ');
-                header.appendChild(unavail);
-            }
-
-            if(ext.description){
-                var desc=document.createElement('span');desc.className='picup-ext-desc picup-hint';
-                desc.textContent=ext.description;header.appendChild(desc);
-            }
-
-            card.appendChild(header);
-
-            /* ── 扩展专属字段（仅启用时显示）── */
-            if(enabled && ext.fields && Object.keys(ext.fields).length>0){
-                var fieldsDiv=document.createElement('div');fieldsDiv.className='picup-ext-fields';
-                Object.keys(ext.fields).forEach(function(fk){
-                    var fd=ext.fields[fk];
-                    var row=document.createElement('div');row.className='picup-field-row';
-                    var left=document.createElement('div');left.className='picup-field-left';
-                    var lbl=document.createElement('label');lbl.className='picup-field-label';
-                    lbl.textContent=(fd.label||fk)+(fd.required?' *':'');
-                    left.appendChild(lbl);
-                    var inp=buildInput(fk,fd,conf[fk]!=null?conf[fk]:null,'extField',fk);
-                    inp.dataset.extKey=key;
-                    left.appendChild(inp);
-                    if(fd.description){
-                        var d2=document.createElement('p');d2.className='picup-field-desc picup-hint';
-                        d2.textContent=fd.description;left.appendChild(d2);
-                    }
-                    row.appendChild(left);fieldsDiv.appendChild(row);
-                });
-                fieldsDiv.querySelectorAll('[data-ext-field]').forEach(function(el){
-                    el.addEventListener('change',syncExtFields);
-                    el.addEventListener('input',debounce(syncExtFields,300));
-                });
-                card.appendChild(fieldsDiv);
-            }
-
-            extSection.appendChild(card);
-
-            /* toggle 事件 */
-            cb.addEventListener('change',function(){
-                var p=getProfiles();var n=profileSel.value;
-                if(!n||!p[n]) return;
-                if(!p[n]._extensions||typeof p[n]._extensions!=='object') p[n]._extensions={};
-                if(!p[n]._extensions[key]||typeof p[n]._extensions[key]!=='object') p[n]._extensions[key]={};
-                p[n]._extensions[key].enabled=this.checked;
-                saveProfiles(p);
-                renderExtensions(p[n]);
-            });
-        });
-    }
-
-    /* ── 同步驱动字段 ── */
-    function syncDriverFields(){
-        var p=getProfiles();var n=profileSel.value;
-        if(!n||!p[n]) return;
-        formDiv.querySelectorAll('[data-field]').forEach(function(el){ p[n][el.dataset.field]=el.value; });
-        saveProfiles(p);
-    }
-
-    /* ── 同步扩展字段 ── */
-    function syncExtFields(){
-        var p=getProfiles();var n=profileSel.value;
-        if(!n||!p[n]) return;
-        if(!p[n]._extensions||typeof p[n]._extensions!=='object') p[n]._extensions={};
-        extSection.querySelectorAll('[data-ext-field]').forEach(function(el){
-            var eKey=el.dataset.extKey;
-            var fKey=el.dataset.extField;
-            if(!p[n]._extensions[eKey]||typeof p[n]._extensions[eKey]!=='object') p[n]._extensions[eKey]={};
-            p[n]._extensions[eKey][fKey]=el.value;
-        });
-        saveProfiles(p);
-    }
-
-    function debounce(fn,ms){ var t; return function(){ clearTimeout(t);t=setTimeout(fn,ms); }; }
-
-    function init(){
-        var p=getProfiles();var first=Object.keys(p)[0]||null;
-        renderSelect(p,first);
-        renderForm(first?p[first]:null);
-    }
-
-    profileSel.addEventListener('change',function(){
-        var p=getProfiles(); renderForm(p[this.value]||null);
-    });
-
-    /* ── 添加方案 ── */
-    addBtn.addEventListener('click',function(){
-        picupDialog('prompt','请输入新方案名称:').then(function(name){
-            if(!name||!name.trim()) return; name=name.trim();
-            var p=getProfiles();
-            if(p[name]){picupDialog('alert','方案 "'+name+'" 已存在。');return;}
-            var dk=Object.keys(DRIVERS)[0]||'local';
-            p[name]={driver:dk,_extensions:{}};saveProfiles(p);renderSelect(p,name);renderForm(p[name]);
-        });
-    });
-
-    /* ── 重命名方案 ── */
-    renameBtn.addEventListener('click',function(){
-        var oldName=profileSel.value;
-        if(!oldName) return;
-        picupDialog('prompt','新方案名称:', oldName).then(function(newName){
-            if(!newName||!newName.trim()) return; newName=newName.trim();
-            if(newName===oldName) return;
-            var p=getProfiles();
-            if(p[newName]){picupDialog('alert','方案 "'+newName+'" 已存在。');return;}
-            var np={};
-            Object.keys(p).forEach(function(k){ np[k===oldName?newName:k]=p[k]; });
-            saveProfiles(np);renderSelect(np,newName);renderForm(np[newName]||null);
-        });
-    });
-
-    /* ── 删除方案 ── */
-    delBtn.addEventListener('click',function(){
-        var name=profileSel.value;if(!name) return;
-        picupDialog('confirm','确认删除方案 "'+name+'"\uff1f\n此操作不可撤销。').then(function(ok){
-            if(!ok) return;
-            var p=getProfiles();delete p[name];saveProfiles(p);
-            var first=Object.keys(p)[0]||null;
-            renderSelect(p,first);renderForm(first?p[first]:null);
-        });
-    });
-
-    /* ── 应用方案 ── */
-    applyBtn.addEventListener('click',function(){
-        var name=profileSel.value;if(!name) return;
-        var dpInput=document.querySelector('input[name="defaultProfile"]');
-        if(dpInput){ dpInput.value=name; }
-        applyBtn.textContent='\u5df2\u5e94\u7528';
-        setTimeout(function(){ applyBtn.textContent='\u5e94\u7528\u6b64\u65b9\u6848'; },1800);
-    });
-
-    function setup(){
-        var ta=getTA();
-        if(ta){
-            ta.addEventListener('blur',function(){
-                var p=getProfiles();var cur=profileSel.value;
-                renderSelect(p,cur&&p[cur]?cur:(Object.keys(p)[0]||null));
-                renderForm(p[profileSel.value]||null);
-            });
-        }
-        init();
-    }
-    if(document.readyState==='loading'){
-        document.addEventListener('DOMContentLoaded',setup);
-    } else {
-        setup();
-    }
-})();
-EOJS;
-
-        $js = str_replace('__DRIVERS_JSON__',    $driversJson,    $js);
-        $js = str_replace('__EXTENSIONS_JSON__', $extensionsJson, $js);
-
-        $css = <<<'EOCSS'
-<style>
-/* ── PicUp 折叠区块（包裹式卡片：wrap > hdr + body） ── */
-.picup-collapse-wrap{
-    border:1px solid var(--md-outline-variant,#cac4d0)!important;
-    border-radius:var(--md-radius-xl,16px)!important;
-    overflow:hidden!important;
-    margin-top:8px!important;
-    background:var(--md-surface-container-low,#f7f2fa)!important;
-}
-.picup-collapse-hdr{
-    display:flex!important;align-items:center!important;justify-content:space-between!important;
-    padding:12px 20px!important;margin:0!important;
-    background:var(--md-surface-container,#f3edf7)!important;
-    border:none!important;border-bottom:1px solid var(--md-outline-variant,#cac4d0)!important;
-    cursor:pointer!important;user-select:none!important;
-    font-size:14px!important;font-weight:600!important;
-    color:var(--md-on-surface,#1c1b1f)!important;
-    transition:background .15s!important;
-    box-sizing:border-box!important;border-radius:0!important;
-}
-.picup-collapse-hdr:hover{background:var(--md-surface-container-high,#ece6f0)!important;}
-.picup-collapse-hdr .pca{font-size:16px!important;color:var(--md-on-surface-variant,#49454f)!important;transition:transform .25s!important;}
-.picup-collapse-hdr.is-closed .pca{transform:rotate(-90deg)!important;}
-.picup-collapse-hdr.is-closed{border-bottom:none!important;}
-.picup-collapse-body{
-    margin:0!important;border:none!important;border-radius:0!important;
-    box-shadow:none!important;overflow:hidden!important;
-    list-style:none!important;
-    transition:max-height .3s ease,opacity .2s ease!important;
-    opacity:1!important;
-    padding:0 16px 16px!important;
-}
-.picup-collapse-body.is-closed{max-height:0!important;opacity:0!important;overflow:hidden!important;padding:0!important;}
-/* 隐藏折叠体内的 Typecho 原生 label（标题已由折叠头部展示） */
-.picup-collapse-body > li > .typecho-label,
-.picup-collapse-body > div > ul.typecho-option > li > .typecho-label{display:none!important;}
-/* 覆盖 AB 包裹：折叠体不需要 ab-options-card 的样式 */
-.picup-collapse-wrap .ab-options-card{
-    border:none!important;border-radius:0!important;margin-top:0!important;
-    box-shadow:none!important;overflow:visible!important;
-}
-/* 暗色模式 */
-[data-theme="dark"] .picup-collapse-wrap{
-    border-color:var(--md-dark-outline-variant,#49454f)!important;
-    background:var(--md-dark-surface-container,#2b2930)!important;
-}
-[data-theme="dark"] .picup-collapse-hdr{
-    background:var(--md-dark-surface-container,#2b2930)!important;
-    border-bottom-color:var(--md-dark-outline-variant,#49454f)!important;
-    color:var(--md-dark-on-surface,#e6e1e5)!important;
-}
-[data-theme="dark"] .picup-collapse-hdr:hover{background:var(--md-dark-surface-container-high,#36343b)!important;}
-
-/* ── PicUp 配置编辑器容器 ── */
-#picup-gui{
-    border:none!important;
-    border-radius:0!important;
-    background:var(--md-surface-container-low,#f7f2fa)!important;
-    padding:18px 20px!important;max-width:100%!important;width:100%!important;
-    box-sizing:border-box!important;margin:0!important;
-    color:inherit!important;
-}
-/* 输入控件 */
-.picup-ctrl{
-    border:1px solid var(--md-outline,#79747e)!important;
-    background:var(--md-surface,#fffbfe)!important;
-    color:var(--md-on-surface,#1c1b1f)!important;
-    border-radius:6px!important;outline:none!important;font-size:13px!important;
-    transition:border-color .15s,background .15s,color .15s,box-shadow .15s!important;
-}
-.picup-ctrl:focus{border-color:var(--md-primary,#6750a4)!important;box-shadow:0 0 0 3px rgba(103,80,164,.15)!important;}
-.picup-input{width:100%!important;padding:8px 11px!important;min-height:36px!important;box-sizing:border-box!important;}
-/* 工具栏 */
-#picup-toolbar{
-    display:flex!important;align-items:center!important;gap:8px!important;flex-wrap:wrap!important;
-    margin-bottom:16px!important;padding-bottom:14px!important;
-    border-bottom:1px solid var(--md-outline-variant,#cac4d0)!important;
-    border-top:none!important;border-left:none!important;border-right:none!important;
-}
-.picup-profile-label{font-size:13px!important;font-weight:600!important;white-space:nowrap!important;color:var(--md-on-surface-variant,#49454f)!important;}
-#picup-profile-row{display:flex!important;align-items:center!important;gap:8px!important;flex:1!important;min-width:140px!important;}
-#picup-profile-sel{flex:1!important;min-width:0!important;}
-#picup-btn-group{display:flex!important;gap:6px!important;flex-wrap:wrap!important;align-items:center!important;}
-/* 字段行 */
-.picup-field-row{margin-bottom:14px!important;}
-.picup-field-left{display:flex!important;flex-direction:column!important;gap:4px!important;}
-.picup-field-label{font-size:13px!important;font-weight:600!important;color:var(--md-on-surface,#1c1b1f)!important;}
-.picup-field-desc{margin:0!important;font-size:12px!important;line-height:1.5!important;}
-.picup-hint{color:var(--md-on-surface-variant,#49454f)!important;}
-/* 按钮 */
-.picup-bar-btn{
-    padding:6px 16px!important;min-height:32px!important;border:none!important;border-radius:20px!important;
-    font-size:12px!important;font-weight:500!important;cursor:pointer!important;white-space:nowrap!important;letter-spacing:.02em!important;
-    transition:opacity .15s,box-shadow .15s!important;
-    display:inline-flex!important;align-items:center!important;justify-content:center!important;gap:4px!important;
-    box-sizing:border-box!important;
-}
-.picup-bar-btn:hover{opacity:.88!important;box-shadow:0 1px 4px rgba(0,0,0,.15)!important;}
-.picup-bar-btn:active{transform:scale(.97)!important;}
-#picup-add-btn   {background:var(--md-primary,#6750a4)!important;color:var(--md-on-primary,#fff)!important;}
-#picup-rename-btn{background:var(--md-primary-container,#eaddff)!important;color:var(--md-on-surface,#1c1b1f)!important;}
-#picup-del-btn   {background:var(--md-error,#b3261e)!important;color:#fff!important;}
-#picup-apply-btn {background:#16a34a!important;color:#fff!important;}
-/* ── 扩展面板 ── */
-.picup-section-sep{margin:16px 0 12px!important;border-top:1px solid var(--md-outline-variant,#cac4d0)!important;border-bottom:none!important;border-left:none!important;border-right:none!important;}
-.picup-section-title{font-size:13px!important;font-weight:700!important;color:var(--md-on-surface-variant,#49454f)!important;margin-bottom:10px!important;display:flex!important;align-items:center!important;gap:6px!important;}
-.picup-ext-card{
-    border:1px solid var(--md-outline-variant,#cac4d0)!important;border-radius:6px!important;margin-bottom:8px!important;
-    background:var(--md-surface,#fffbfe)!important;overflow:hidden!important;transition:border-color .15s!important;
-}
-.picup-ext-card.picup-ext-open{border-color:var(--md-primary,#6750a4)!important;}
-.picup-ext-header{
-    display:flex!important;align-items:center!important;flex-wrap:wrap!important;gap:8px!important;
-    padding:10px 12px!important;
-}
-.picup-ext-toggle-label{display:flex!important;align-items:center!important;gap:6px!important;cursor:pointer!important;user-select:none!important;}
-.picup-ext-cb{width:16px!important;height:16px!important;cursor:pointer!important;accent-color:var(--md-primary,#6750a4)!important;}
-.picup-ext-name{font-size:13px!important;font-weight:600!important;color:var(--md-on-surface,#1c1b1f)!important;}
-.picup-ext-badge{
-    display:inline-flex!important;align-items:center!important;padding:1px 7px!important;border-radius:10px!important;
-    font-size:11px!important;font-weight:600!important;white-space:nowrap!important;
-}
-.picup-ext-ok{background:#dcfce7!important;color:#15803d!important;}
-.picup-ext-unavail{background:#fee2e2!important;color:#b91c1c!important;cursor:help!important;}
-.picup-ext-desc{font-size:12px!important;color:var(--md-on-surface-variant,#49454f)!important;flex:1!important;min-width:0!important;}
-.picup-ext-fields{
-    padding:10px 12px 4px!important;border-top:1px solid var(--md-outline-variant,#cac4d0)!important;
-    background:var(--md-surface-container-low,#f7f2fa)!important;
-}
-/* ── 移动端 ── */
-@media(max-width:600px){
-    #picup-gui{padding:12px!important;border-radius:6px!important;}
-    #picup-toolbar{flex-direction:column!important;align-items:stretch!important;gap:8px!important;}
-    #picup-profile-row{flex:none!important;width:100%!important;}
-    #picup-btn-group{width:100%!important;}
-    .picup-bar-btn{flex:1!important;padding:8px 6px!important;min-height:38px!important;font-size:13px!important;}
-    .picup-ext-header{flex-direction:column!important;align-items:flex-start!important;}
-}
-@media(max-width:400px){.picup-bar-btn{font-size:12px!important;padding:7px 4px!important;}}
-/* ── 暗色模式（使用 AdminBeautify 注入的 --md-dark-* 变量）── */
-l[data-theme="dark"] #picup-gui,
-[data-theme="dark"] #picup-gui{
-    border:none!important;
-    background:var(--md-dark-surface-container,#2b2930)!important;
-}
-l[data-theme="dark"] #picup-gui-wrap,
-[data-theme="dark"] #picup-gui-wrap{border-color:var(--md-dark-outline-variant,#49454f)!important;}
-l[data-theme="dark"] #picup-toolbar,
-[data-theme="dark"] #picup-toolbar{border-bottom-color:var(--md-dark-outline-variant,#49454f)!important;}
-l[data-theme="dark"] .picup-profile-label,
-[data-theme="dark"] .picup-profile-label{color:var(--md-dark-on-surface-variant,#cac4d0)!important;}
-l[data-theme="dark"] .picup-ctrl,
-[data-theme="dark"] .picup-ctrl{
-    border-color:var(--md-dark-outline,#938f99)!important;
-    background:var(--md-dark-surface,#1c1b1f)!important;
-    color:var(--md-dark-on-surface,#e6e1e5)!important;
-}
-l[data-theme="dark"] .picup-ctrl:focus,
-[data-theme="dark"] .picup-ctrl:focus{border-color:var(--md-dark-primary,#d0bcff)!important;box-shadow:0 0 0 3px rgba(208,188,255,.2)!important;}
-l[data-theme="dark"] .picup-field-label,
-[data-theme="dark"] .picup-field-label{color:var(--md-dark-on-surface,#e6e1e5)!important;}
-l[data-theme="dark"] .picup-hint,
-[data-theme="dark"] .picup-hint{color:var(--md-dark-on-surface-variant,#cac4d0)!important;}
-l[data-theme="dark"] .picup-section-sep,
-[data-theme="dark"] .picup-section-sep{border-top-color:var(--md-dark-outline-variant,#49454f)!important;}
-l[data-theme="dark"] .picup-section-title,
-[data-theme="dark"] .picup-section-title{color:var(--md-dark-on-surface-variant,#cac4d0)!important;}
-l[data-theme="dark"] .picup-ext-card,
-[data-theme="dark"] .picup-ext-card{
-    border-color:var(--md-dark-outline-variant,#49454f)!important;
-    background:var(--md-dark-surface,#1c1b1f)!important;
-}
-l[data-theme="dark"] .picup-ext-card.picup-ext-open,
-[data-theme="dark"] .picup-ext-card.picup-ext-open{border-color:var(--md-dark-primary,#d0bcff)!important;}
-l[data-theme="dark"] .picup-ext-name,
-[data-theme="dark"] .picup-ext-name{color:var(--md-dark-on-surface,#e6e1e5)!important;}
-l[data-theme="dark"] .picup-ext-desc,
-[data-theme="dark"] .picup-ext-desc{color:var(--md-dark-on-surface-variant,#cac4d0)!important;}
-l[data-theme="dark"] .picup-ext-fields,
-[data-theme="dark"] .picup-ext-fields{
-    border-top-color:var(--md-dark-outline-variant,#49454f)!important;
-    background:var(--md-dark-surface-container,#2b2930)!important;
-}
-</style>
-EOCSS;
-
-        // 折叠初始化 JS（在此定义公共函数，backup 区入口也会复用）
-        $collapseJs = <<<'EOCOLLAPSE'
-<script>
-(function(){
-if(window.__picupCollapseInit) return;
-window.__picupCollapseInit=true;
-
-/**
- * 为目标元素添加折叠功能（包裹式卡片）。
- * 创建 .picup-collapse-wrap > .picup-collapse-hdr + el.picup-collapse-body 结构。
- * el 会被移入 wrap 容器中，原位置由 wrap 替代。
- */
-window.picupAddCollapse=function(el,title,key,defaultOpen){
-    if(!el||el.dataset.picupColl) return;
-    el.dataset.picupColl='1';
-    var stored=localStorage.getItem('picup_c_'+key);
-    var open=(stored===null)?defaultOpen:(stored==='1');
-    var animating=false;
-
-    /* 创建包裹容器 */
-    var wrap=document.createElement('div');
-    wrap.className='picup-collapse-wrap';
-
-    /* 创建折叠头 */
-    var hdr=document.createElement('div');
-    hdr.className='picup-collapse-hdr'+(open?'':' is-closed');
-    hdr.innerHTML='<span>'+title+'</span><span class="pca">▾</span>';
-
-    /* 将 el 移入 wrap：先在 el 原位置插入 wrap，再把 el 追加到 wrap 中 */
-    el.parentNode.insertBefore(wrap,el);
-    wrap.appendChild(hdr);
-    wrap.appendChild(el);
-
-    /* 给 el 添加 body 类 */
-    el.classList.add('picup-collapse-body');
-    if(!open){
-        el.classList.add('is-closed');
-        el.style.maxHeight='0';
-    } else {
-        el.style.maxHeight='none';
-    }
-
-    function expandEl(){
-        el.classList.remove('is-closed');
-        el.style.maxHeight='0';el.style.opacity='0';el.style.overflow='hidden';
-        var h=el.scrollHeight;
-        requestAnimationFrame(function(){
-            el.style.maxHeight=h+'px';el.style.opacity='1';
-        });
-        animating=true;
-        var done=function(e){
-            if(e&&e.target!==el) return;
-            el.removeEventListener('transitionend',done);
-            animating=false;
-            if(!el.classList.contains('is-closed')){
-                el.style.maxHeight='none';el.style.overflow='visible';
-            }
-        };
-        el.addEventListener('transitionend',done);
-        /* 安全兜底：动画最长 400ms */
-        setTimeout(function(){done({target:el});},400);
-    }
-
-    function collapseEl(){
-        /* 先设定当前展开高度，再在下一帧transition到0 */
-        el.style.overflow='hidden';
-        el.style.maxHeight=el.scrollHeight+'px';
-        requestAnimationFrame(function(){
-            el.style.maxHeight='0';el.style.opacity='0';
-        });
-        animating=true;
-        var done=function(e){
-            if(e&&e.target!==el) return;
-            el.removeEventListener('transitionend',done);
-            animating=false;
-            if(el.classList.contains('is-closed')){
-                el.style.maxHeight='0';
-            }
-        };
-        el.addEventListener('transitionend',done);
-        setTimeout(function(){done({target:el});},400);
-        el.classList.add('is-closed');
-    }
-
-    hdr.addEventListener('click',function(){
-        if(animating){
-            /* 打断当前动画：立刻取消 transition, 清除回调, 反转方向 */
-            el.style.transition='none';
-            var cur=getComputedStyle(el).maxHeight;
-            el.style.maxHeight=cur;
-            /* 重新恢复 transition */
-            void el.offsetHeight; /* force reflow */
-            el.style.transition='';
-            animating=false;
-        }
-        open=!open;
-        hdr.classList.toggle('is-closed',!open);
-        localStorage.setItem('picup_c_'+key,open?'1':'0');
-        if(open){expandEl();}else{collapseEl();}
-    });
-};
-
-function findParentCard(el){
-    /* 如果 el 被 AB 包在 .ab-options-card 中，返回该 card；否则返回 el 本身 */
-    var p=el.parentNode;
-    if(p&&p.classList&&p.classList.contains('ab-options-card')) return p;
-    return null;
-}
-
-/* 找到 input/textarea 所在的最近 ul.typecho-option（或其 AB 卡片） */
-function findUlOrCard(el){
-    if(!el) return null;
-    var ul=el.closest?el.closest('ul.typecho-option'):null;
-    if(!ul){var p=el;while(p&&p.tagName!=='UL')p=p.parentNode;ul=p||null;}
-    return ul?(findParentCard(ul)||ul):null;
-}
-/* 将多个元素合并到一个 div 后折叠；只有一项时直接折叠该元素 */
-function groupCollapse(targets,title,key,open){
-    targets=targets.filter(Boolean);
-    if(!targets.length) return;
-    if(targets.length===1){window.picupAddCollapse(targets[0],title,key,open);return;}
-    var grp=document.createElement('div');
-    targets[0].parentNode.insertBefore(grp,targets[0]);
-    targets.forEach(function(t){grp.appendChild(t);});
-    window.picupAddCollapse(grp,title,key,open);
-}
-function run(){
-    /* 配置编辑器 */
-    var gui=document.getElementById('typecho-option-item-picup-gui');
-    if(gui){
-        var card=findParentCard(gui);
-        window.picupAddCollapse(card||gui,'配置编辑器','editor',false);
-    }
-    /* JSON 配置：configJson + suffixProfiles 合并到一个折叠 */
-    groupCollapse([
-        findUlOrCard(document.querySelector('textarea[name="configJson"]')),
-        findUlOrCard(document.querySelector('textarea[name="suffixProfiles"]'))
-    ],'JSON 配置','json',false);
-    /* 配置备份 */
-    var bk=document.getElementById('typecho-option-item-picup-backup');
-    if(bk){ groupCollapse([findParentCard(bk)||bk],'配置备份','backup',false); }
-    /* 方案规则：文件接管范围 + 后缀方案 GUI */
-    groupCollapse([
-        findUlOrCard(document.querySelector('input[name="mimeScope"]')),
-        (function(){ var s=document.getElementById('typecho-option-item-picup-suffix-gui'); return s?(findParentCard(s)||s):null; })()
-    ],'方案规则','suffixrule',false);
-}
-if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',run);}
-else{run();}
-document.addEventListener('ab:pageload',function(){
-    /* AB AJAX 切换页面后重新初始化 —— 先清除旧标记 */
-    document.querySelectorAll('[data-picup-coll]').forEach(function(el){delete el.dataset.picupColl;});
-    window.__picupCollapseInit=false;
-    run();
-});
-})();
-</script>
-EOCOLLAPSE;
-
         $toolbar = '<div id="picup-toolbar">'
             . '<div id="picup-profile-row">'
             . '<span class="picup-profile-label">' . _t('方案：') . '</span>'
@@ -3282,8 +2188,7 @@ EOCOLLAPSE;
             . '</div>'
             . '</div>';
 
-        return $css . $collapseJs
-            . '<ul class="typecho-option" id="typecho-option-item-picup-gui"><li>'
+        return '<ul class="typecho-option" id="typecho-option-item-picup-gui"><li>'
             . '<label class="typecho-label">' . _t('配置编辑器') . '</label>'
             . '<div id="picup-gui">'
             . $toolbar
@@ -3293,7 +2198,6 @@ EOCOLLAPSE;
             . _t('修改实时同步到下方 JSON；手动编辑 JSON 后单击文本框外部可刷新编辑器。')
             . '</p>'
             . '</div>'
-            . '<script>' . $js . '</script>'
             . '</li></ul>';
     }
 }

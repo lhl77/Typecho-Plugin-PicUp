@@ -163,7 +163,7 @@ class Action extends Widget implements ActionInterface
             $this->jsonSuccess([
                 'config_json'     => $row['config_json'],
                 'default_profile' => $row['default_profile'],
-            ], '恢复成功，请刷新配置页面查看效果');
+            ], '恢复成功，但在保存设置后才能生效。');
         } catch (\Exception $e) {
             $this->jsonError('恢复失败：' . $e->getMessage());
         }

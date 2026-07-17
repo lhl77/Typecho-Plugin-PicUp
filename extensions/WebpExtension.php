@@ -6,13 +6,11 @@
  * 在文件上传到云存储前，将 JPEG / PNG / GIF / BMP 自动转换为 WebP 格式，
  * 有效减小文件体积（通常比 JPEG 小 25–35%）。
  *
- * 依赖：
- * - PHP GD 扩展，且须编译了 WebP 支持（--with-webp 或 --with-webp-dir）
- * - 检测方法：php -r "print_r(gd_info());" 查看 WebP Support 是否为 true
+ * 支持 GD 与 Imagick 两种驱动，可在方案配置中选择。
  *
  * @package PicUp
  * @author LHL
- * @version 1.0.0
+ * @version 1.1.0
  */
 
 namespace TypechoPlugin\PicUp\extensions;
@@ -32,7 +30,7 @@ class WebpExtension implements ExtensionInterface
      */
     public static function getDescription(): string
     {
-        return '上传前将 JPEG/PNG/GIF/BMP 转为 WebP 格式，需 PHP GD 扩展并编译 WebP 支持。';
+        return '上传前将 JPEG/PNG/GIF/BMP 转为 WebP 格式，支持 GD 或 Imagick 驱动。';
     }
 
     /**
@@ -46,36 +44,45 @@ class WebpExtension implements ExtensionInterface
 
     /**
      * {@inheritdoc}
+     * 无硬性 PHP 扩展要求，任一驱动可用即可。
      */
     public static function getRequiredPhpExtensions(): array
     {
-        return ['gd'];
+        return [];
     }
 
     /**
      * {@inheritdoc}
-     * 除 GD 外，还需 GD 编译了 WebP 支持（imagewebp 函数存在）。
+     * GD（需 WebP 支持）或 Imagick（需 WEBP 格式支持）任一可用即为当前环境可用。
      */
     public static function isAvailable(): bool
     {
-        if (!extension_loaded('gd')) {
+        return self::isGdWebpAvailable() || self::isImagickWebpAvailable();
+    }
+
+    /**
+     * 检测 GD 是否支持 WebP 编码。
+     */
+    public static function isGdWebpAvailable(): bool
+    {
+        if (!extension_loaded('gd') || !function_exists('imagewebp')) {
             return false;
         }
-
-        // 检测 WebP 编码支持
-        if (!function_exists('imagewebp')) {
-            return false;
-        }
-
-        // 进一步检查 gd_info()
         if (function_exists('gd_info')) {
             $info = gd_info();
             if (isset($info['WebP Support']) && !$info['WebP Support']) {
                 return false;
             }
         }
-
         return true;
+    }
+
+    /**
+     * 检测 Imagick 扩展是否可用且支持 WebP 格式。
+     */
+    public static function isImagickWebpAvailable(): bool
+    {
+        return self::isImagickFormatAvailable('WEBP');
     }
 
     /**
@@ -83,7 +90,28 @@ class WebpExtension implements ExtensionInterface
      */
     public static function getConfigFields(): array
     {
+        $driverOptions = [];
+        if (self::isGdWebpAvailable()) {
+            $driverOptions['gd'] = 'GD';
+        }
+        if (self::isImagickWebpAvailable()) {
+            $driverOptions['imagick'] = 'Imagick';
+        }
+        if (empty($driverOptions)) {
+            $driverOptions['gd'] = 'GD';
+        }
+
+        $firstKey = array_key_first($driverOptions);
+
         return [
+            'driver' => [
+                'label'       => '转换驱动',
+                'type'        => 'select',
+                'default'     => $firstKey,
+                'description' => 'Imagick 对调色板 PNG 等特殊格式兼容性更好；仅当 PHP Imagick 扩展安装且编译 WebP 支持时可选。',
+                'required'    => false,
+                'options'     => $driverOptions,
+            ],
             'quality' => [
                 'label'       => '转换质量',
                 'type'        => 'number',
@@ -114,36 +142,124 @@ class WebpExtension implements ExtensionInterface
         $quality = isset($config['quality']) ? (int)$config['quality'] : 85;
         $quality = max(1, min(100, $quality));
 
-        $img = $this->createImageResource($localFile, $mimeType);
-        if (!$img) {
-            return [$localFile, $mimeType];
+        $driver = (string)($config['driver'] ?? 'gd');
+
+        // 优先按用户选择的驱动处理；不可用时回退到另一驱动
+        if ($driver === 'imagick' && self::isImagickWebpAvailable()) {
+            $result = $this->convertWithImagick($localFile, $quality);
+            if ($result !== null) {
+                return [$result, 'image/webp'];
+            }
         }
 
-        // 处理透明通道（PNG/GIF 可能有 alpha）
+        if ($driver !== 'imagick' || !self::isImagickWebpAvailable()) {
+            if (self::isGdWebpAvailable()) {
+                $result = $this->convertWithGd($localFile, $mimeType, $quality);
+                if ($result !== null) {
+                    return [$result, 'image/webp'];
+                }
+            }
+        }
+
+        // GD 失败且未尝试过 Imagick，最后用 Imagick 兜底
+        if ($driver === 'gd' && self::isImagickWebpAvailable()) {
+            $result = $this->convertWithImagick($localFile, $quality);
+            if ($result !== null) {
+                return [$result, 'image/webp'];
+            }
+        }
+
+        return [$localFile, $mimeType];
+    }
+
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * 使用 GD 将图片转为 WebP（含调色板 PNG 转 truecolor 修复）。
+     */
+    private function convertWithGd(string $localFile, string $mimeType, int $quality): ?string
+    {
+        if (!self::isGdWebpAvailable()) {
+            return null;
+        }
+
+        $img = $this->createGdImage($localFile, $mimeType);
+        if (!$img) {
+            return null;
+        }
+
+        // 修复：调色板（索引色）PNG/GIF 在部分 GD 版本下直接
+        // imagewebp 会输出 0 字节文件，先转为 truecolor 再编码。
+        if (!imageistruecolor($img)) {
+            imagepalettetotruecolor($img);
+        }
+
         $this->handleTransparency($img);
 
         $tmpFile = @tempnam(sys_get_temp_dir(), 'picup_webp_');
         if (!$tmpFile) {
             imagedestroy($img);
-            return [$localFile, $mimeType];
+            return null;
         }
 
-        imagewebp($img, $tmpFile, $quality);
+        $ok = @imagewebp($img, $tmpFile, $quality);
         imagedestroy($img);
 
-        return [$tmpFile, 'image/webp'];
+        if (!$ok || !is_file($tmpFile) || @filesize($tmpFile) <= 0) {
+            @unlink($tmpFile);
+            return null;
+        }
+
+        return $tmpFile;
+    }
+
+    /**
+     * 使用 Imagick 将图片转为 WebP。
+     */
+    private function convertWithImagick(string $localFile, int $quality): ?string
+    {
+        if (!self::isImagickWebpAvailable()) {
+            return null;
+        }
+
+        try {
+            if (!class_exists('Imagick')) {
+                return null;
+            }
+            $imagick = new \Imagick($localFile);
+            $imagick->setImageFormat('webp');
+            $imagick->setImageCompressionQuality($quality);
+
+            if ($imagick->getImageAlphaChannel()) {
+                $imagick->setImageAlphaChannel(\Imagick::ALPHACHANNEL_ACTIVATE);
+            }
+
+            $tmpFile = @tempnam(sys_get_temp_dir(), 'picup_webp_');
+            if (!$tmpFile) {
+                $imagick->destroy();
+                return null;
+            }
+
+            $imagick->writeImage($tmpFile);
+            $imagick->destroy();
+
+            if (!is_file($tmpFile) || @filesize($tmpFile) <= 0) {
+                @unlink($tmpFile);
+                return null;
+            }
+
+            return $tmpFile;
+        } catch (\Throwable $e) {
+            return null;
+        }
     }
 
     /* ------------------------------------------------------------------ */
 
     /**
      * 根据 MIME 类型创建 GD 图像资源
-     *
-     * @param string $localFile
-     * @param string $mimeType
-     * @return resource|false
      */
-    private function createImageResource(string $localFile, string $mimeType)
+    private function createGdImage(string $localFile, string $mimeType)
     {
         switch ($mimeType) {
             case 'image/jpeg':
@@ -175,13 +291,28 @@ class WebpExtension implements ExtensionInterface
 
     /**
      * 对 GIF/PNG 透明通道进行 WebP 兼容处理
-     *
-     * @param resource $img
      */
     private function handleTransparency($img): void
     {
-        // WebP 本身支持 alpha，直接保留即可
         imagealphablending($img, true);
         imagesavealpha($img, true);
+    }
+
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * 检测 Imagick 是否支持指定格式
+     */
+    private static function isImagickFormatAvailable(string $format): bool
+    {
+        if (!extension_loaded('imagick') || !class_exists('Imagick')) {
+            return false;
+        }
+        try {
+            $formats = \Imagick::queryFormats();
+            return is_array($formats) && in_array(strtoupper($format), $formats, true);
+        } catch (\Throwable $e) {
+            return false;
+        }
     }
 }

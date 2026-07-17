@@ -5,13 +5,11 @@
  *
  * 在文件上传到云存储前，将 JPEG / PNG / GIF / BMP / WebP 自动转换为 AVIF 格式。
  *
- * 依赖：
- * - PHP GD 扩展，且须编译了 AVIF 支持
- * - 检测方法：php -r "print_r(gd_info());" 查看 AVIF Support 是否为 true
+ * 支持 GD 与 Imagick 两种驱动，可在方案配置中选择。
  *
  * @package PicUp
  * @author LHL
- * @version 1.0.0
+ * @version 1.1.0
  */
 
 namespace TypechoPlugin\PicUp\extensions;
@@ -31,7 +29,7 @@ class AvifExtension implements ExtensionInterface
      */
     public static function getDescription(): string
     {
-        return '上传前将 JPEG/PNG/GIF/BMP/WebP 转为 AVIF 格式，需 PHP GD 扩展并编译 AVIF 支持。';
+        return '上传前将 JPEG/PNG/GIF/BMP/WebP 转为 AVIF 格式，支持 GD 或 Imagick 驱动。';
     }
 
     /**
@@ -45,33 +43,45 @@ class AvifExtension implements ExtensionInterface
 
     /**
      * {@inheritdoc}
+     * 无硬性 PHP 扩展要求，任一驱动可用即可。
      */
     public static function getRequiredPhpExtensions(): array
     {
-        return ['gd'];
+        return [];
     }
 
     /**
      * {@inheritdoc}
+     * GD（需 AVIF 支持）或 Imagick（需 AVIF 格式支持）任一可用即为当前环境可用。
      */
     public static function isAvailable(): bool
     {
-        if (!extension_loaded('gd')) {
+        return self::isGdAvifAvailable() || self::isImagickAvifAvailable();
+    }
+
+    /**
+     * 检测 GD 是否支持 AVIF 编码。
+     */
+    public static function isGdAvifAvailable(): bool
+    {
+        if (!extension_loaded('gd') || !function_exists('imageavif')) {
             return false;
         }
-
-        if (!function_exists('imageavif')) {
-            return false;
-        }
-
         if (function_exists('gd_info')) {
             $info = gd_info();
             if (isset($info['AVIF Support']) && !$info['AVIF Support']) {
                 return false;
             }
         }
-
         return true;
+    }
+
+    /**
+     * 检测 Imagick 扩展是否可用且支持 AVIF 格式。
+     */
+    public static function isImagickAvifAvailable(): bool
+    {
+        return self::isImagickFormatAvailable('AVIF');
     }
 
     /**
@@ -79,7 +89,28 @@ class AvifExtension implements ExtensionInterface
      */
     public static function getConfigFields(): array
     {
+        $driverOptions = [];
+        if (self::isGdAvifAvailable()) {
+            $driverOptions['gd'] = 'GD';
+        }
+        if (self::isImagickAvifAvailable()) {
+            $driverOptions['imagick'] = 'Imagick';
+        }
+        if (empty($driverOptions)) {
+            $driverOptions['gd'] = 'GD';
+        }
+
+        $firstKey = array_key_first($driverOptions);
+
         return [
+            'driver' => [
+                'label'       => '转换驱动',
+                'type'        => 'select',
+                'default'     => $firstKey,
+                'description' => 'Imagick 对调色板 PNG 等特殊格式兼容性更好；仅当 PHP Imagick 扩展安装且编译 AVIF 支持时可选。',
+                'required'    => false,
+                'options'     => $driverOptions,
+            ],
             'quality' => [
                 'label'       => '转换质量',
                 'type'        => 'number',
@@ -106,9 +137,56 @@ class AvifExtension implements ExtensionInterface
         $quality = isset($config['quality']) ? (int)$config['quality'] : 60;
         $quality = max(1, min(100, $quality));
 
-        $img = $this->createImageResource($localFile, $mimeType);
+        $driver = (string)($config['driver'] ?? 'gd');
+
+        // 优先按用户选择的驱动处理；不可用时回退到另一驱动
+        if ($driver === 'imagick' && self::isImagickAvifAvailable()) {
+            $result = $this->convertWithImagick($localFile, $quality);
+            if ($result !== null) {
+                return [$result, 'image/avif'];
+            }
+        }
+
+        if ($driver !== 'imagick' || !self::isImagickAvifAvailable()) {
+            if (self::isGdAvifAvailable()) {
+                $result = $this->convertWithGd($localFile, $mimeType, $quality);
+                if ($result !== null) {
+                    return [$result, 'image/avif'];
+                }
+            }
+        }
+
+        // GD 失败且未尝试过 Imagick，最后用 Imagick 兜底
+        if ($driver === 'gd' && self::isImagickAvifAvailable()) {
+            $result = $this->convertWithImagick($localFile, $quality);
+            if ($result !== null) {
+                return [$result, 'image/avif'];
+            }
+        }
+
+        return [$localFile, $mimeType];
+    }
+
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * 使用 GD 将图片转为 AVIF（含调色板 PNG 转 truecolor 修复）。
+     */
+    private function convertWithGd(string $localFile, string $mimeType, int $quality): ?string
+    {
+        if (!self::isGdAvifAvailable()) {
+            return null;
+        }
+
+        $img = $this->createGdImage($localFile, $mimeType);
         if (!$img) {
-            return [$localFile, $mimeType];
+            return null;
+        }
+
+        // 修复：调色板（索引色）PNG/GIF 在部分 GD 版本下直接
+        // imageavif 会输出 0 字节文件，先转为 truecolor 再编码。
+        if (!imageistruecolor($img)) {
+            imagepalettetotruecolor($img);
         }
 
         $this->handleTransparency($img);
@@ -116,26 +194,67 @@ class AvifExtension implements ExtensionInterface
         $tmpFile = @tempnam(sys_get_temp_dir(), 'picup_avif_');
         if (!$tmpFile) {
             imagedestroy($img);
-            return [$localFile, $mimeType];
+            return null;
         }
 
-        $saved = @imageavif($img, $tmpFile, $quality);
+        $ok = @imageavif($img, $tmpFile, $quality);
         imagedestroy($img);
 
-        if (!$saved || !is_file($tmpFile) || @filesize($tmpFile) <= 0) {
+        if (!$ok || !is_file($tmpFile) || @filesize($tmpFile) <= 0) {
             @unlink($tmpFile);
-            return [$localFile, $mimeType];
+            return null;
         }
 
-        return [$tmpFile, 'image/avif'];
+        return $tmpFile;
     }
 
     /**
-     * @param string $localFile
-     * @param string $mimeType
-     * @return resource|false
+     * 使用 Imagick 将图片转为 AVIF。
      */
-    private function createImageResource(string $localFile, string $mimeType)
+    private function convertWithImagick(string $localFile, int $quality): ?string
+    {
+        if (!self::isImagickAvifAvailable()) {
+            return null;
+        }
+
+        try {
+            if (!class_exists('Imagick')) {
+                return null;
+            }
+            $imagick = new \Imagick($localFile);
+            $imagick->setImageFormat('avif');
+            $imagick->setImageCompressionQuality($quality);
+
+            if ($imagick->getImageAlphaChannel()) {
+                $imagick->setImageAlphaChannel(\Imagick::ALPHACHANNEL_ACTIVATE);
+            }
+
+            $tmpFile = @tempnam(sys_get_temp_dir(), 'picup_avif_');
+            if (!$tmpFile) {
+                $imagick->destroy();
+                return null;
+            }
+
+            $imagick->writeImage($tmpFile);
+            $imagick->destroy();
+
+            if (!is_file($tmpFile) || @filesize($tmpFile) <= 0) {
+                @unlink($tmpFile);
+                return null;
+            }
+
+            return $tmpFile;
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * 根据 MIME 类型创建 GD 图像资源
+     */
+    private function createGdImage(string $localFile, string $mimeType)
     {
         switch ($mimeType) {
             case 'image/jpeg':
@@ -178,5 +297,23 @@ class AvifExtension implements ExtensionInterface
     {
         imagealphablending($img, true);
         imagesavealpha($img, true);
+    }
+
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * 检测 Imagick 是否支持指定格式
+     */
+    private static function isImagickFormatAvailable(string $format): bool
+    {
+        if (!extension_loaded('imagick') || !class_exists('Imagick')) {
+            return false;
+        }
+        try {
+            $formats = \Imagick::queryFormats();
+            return is_array($formats) && in_array(strtoupper($format), $formats, true);
+        } catch (\Throwable $e) {
+            return false;
+        }
     }
 }
