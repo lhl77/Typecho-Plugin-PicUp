@@ -1,5 +1,6 @@
 <div align="center">
 
+![PicUp](https://i.see.you/2026/07/26/x9Nc/8bdf44f4c94bfdea7eca6aa31c30b7cd.jpg)
 # PicUp for Typecho
 
 **A multi-backend image & attachment upload plugin for Typecho — supports 18+ cloud storage services, multiple profiles, and server-side image processing.**
