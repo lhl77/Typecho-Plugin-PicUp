@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://i.see.you/2026/07/26/5dnU/6cf4c80b939c47baefb00b66bd567b8a.jpg" width="50%" />
+<img src="https://i.see.you/2026/07/26/5dnU/6cf4c80b939c47baefb00b66bd567b8a.jpg" width="30%" />
 
 # PicUp for Typecho
 
