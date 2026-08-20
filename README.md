@@ -92,7 +92,7 @@ Check [PicUp](https://ab-store.lhl.one/plugin/414bab94) on AB Store Web.
 
 ### Option 2 — Manual
 
-1. Download the latest ZIP from [GitHub Releases](https://github.com/lhl77/Typecho-Plugin-PicUp/releases)
+1. Download the latest ZIP from [GitHub Releases](https://github.com/lhl77/Typecho-Plugin-PicUp/releases) / [AB Store Web](https://ab-store.lhl.one/plugin/414bab94)
 2. Extract the archive and rename the folder to `PicUp`
 3. Upload it to `usr/plugins/` in your Typecho installation
 4. Go to **Admin** → **Console** → **Plugins** → enable **PicUp**
