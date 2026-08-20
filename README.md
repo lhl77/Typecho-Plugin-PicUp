@@ -88,7 +88,7 @@ Extensions live in the `extensions/` directory and can be enabled or disabled in
 
 ### Option 1 — AB-Store (Recommended)
 
-Install the [AdminBeautify](https://github.com/lhl77/Typecho-Plugin-AdminBeautify) plugin, then open **AB-Store** in the admin panel, search for **PicUp**, and install with one click. Updates are delivered the same way.
+Check [PicUp](https://ab-store.lhl.one/plugin/414bab94) on AB Store Web.
 
 ### Option 2 — Manual
 
