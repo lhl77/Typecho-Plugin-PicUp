@@ -149,7 +149,7 @@ class CheveretoV4Driver implements DriverInterface
         ]);
         $response = curl_exec($ch);
         $errno    = curl_errno($ch);
-        curl_close($ch);
+        if (PHP_VERSION_ID < 80000) curl_close($ch);
         return $errno ? false : $response;
     }
 }

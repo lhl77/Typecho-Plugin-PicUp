@@ -116,12 +116,12 @@ class CompressExtension implements ExtensionInterface
 
         $tmpFile = $this->createTempFile();
         if (!$tmpFile) {
-            imagedestroy($img);
+            if (PHP_VERSION_ID < 80000) imagedestroy($img);
             return [$localFile, $mimeType];
         }
 
         imagejpeg($img, $tmpFile, $quality);
-        imagedestroy($img);
+        if (PHP_VERSION_ID < 80000) imagedestroy($img);
 
         return [$tmpFile, $mimeType];
     }
@@ -138,7 +138,7 @@ class CompressExtension implements ExtensionInterface
 
         $tmpFile = $this->createTempFile();
         if (!$tmpFile) {
-            imagedestroy($img);
+            if (PHP_VERSION_ID < 80000) imagedestroy($img);
             return [$localFile, $mimeType];
         }
 
@@ -147,7 +147,7 @@ class CompressExtension implements ExtensionInterface
         $compression = max(0, min(9, $compression));
 
         imagepng($img, $tmpFile, $compression);
-        imagedestroy($img);
+        if (PHP_VERSION_ID < 80000) imagedestroy($img);
 
         return [$tmpFile, $mimeType];
     }
@@ -165,12 +165,12 @@ class CompressExtension implements ExtensionInterface
 
         $tmpFile = $this->createTempFile();
         if (!$tmpFile) {
-            imagedestroy($img);
+            if (PHP_VERSION_ID < 80000) imagedestroy($img);
             return [$localFile, $mimeType];
         }
 
         imagewebp($img, $tmpFile, $quality);
-        imagedestroy($img);
+        if (PHP_VERSION_ID < 80000) imagedestroy($img);
 
         return [$tmpFile, $mimeType];
     }

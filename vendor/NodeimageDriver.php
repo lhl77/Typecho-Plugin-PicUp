@@ -181,7 +181,7 @@ class NodeimageDriver implements DriverInterface
         $response = curl_exec($ch);
         $errno    = curl_errno($ch);
         $errMsg   = curl_error($ch);
-        curl_close($ch);
+        if (PHP_VERSION_ID < 80000) curl_close($ch);
         if ($errno) {
             error_log('[PicUp][NodeImage] cURL 错误 #' . $errno . ': ' . $errMsg);
             return false;
@@ -207,7 +207,7 @@ class NodeimageDriver implements DriverInterface
             curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
         }
         $response = curl_exec($ch);
-        curl_close($ch);
+        if (PHP_VERSION_ID < 80000) curl_close($ch);
         return $response ?: '';
     }
 }

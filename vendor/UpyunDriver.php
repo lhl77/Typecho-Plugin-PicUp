@@ -115,7 +115,7 @@ class UpyunDriver implements DriverInterface
         $resp  = curl_exec($ch);
         $errno = curl_errno($ch);
         $http  = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
+        if (PHP_VERSION_ID < 80000) curl_close($ch);
 
         if ($errno || ($http !== 200 && $http !== 201)) {
             return false;
@@ -160,7 +160,7 @@ class UpyunDriver implements DriverInterface
         $resp  = curl_exec($ch);
         $errno = curl_errno($ch);
         $http  = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
+        if (PHP_VERSION_ID < 80000) curl_close($ch);
 
         return !$errno && ($http === 200 || $http === 204);
     }

@@ -183,19 +183,19 @@ class WatermarkExtension implements ExtensionInterface
         }
 
         if (!$success) {
-            imagedestroy($canvas);
+            if (PHP_VERSION_ID < 80000) imagedestroy($canvas);
             return [$localFile, $mimeType];
         }
 
         // 保存到临时文件
         $tmpFile = @tempnam(sys_get_temp_dir(), 'picup_wm_');
         if (!$tmpFile) {
-            imagedestroy($canvas);
+            if (PHP_VERSION_ID < 80000) imagedestroy($canvas);
             return [$localFile, $mimeType];
         }
 
         $saved = $this->saveImage($canvas, $tmpFile, $mimeType);
-        imagedestroy($canvas);
+        if (PHP_VERSION_ID < 80000) imagedestroy($canvas);
 
         if (!$saved) {
             @unlink($tmpFile);
@@ -363,7 +363,7 @@ class WatermarkExtension implements ExtensionInterface
         $targetH = (int)($wmH * $targetW / $wmW);
 
         if ($targetW <= 0 || $targetH <= 0) {
-            imagedestroy($wm);
+            if (PHP_VERSION_ID < 80000) imagedestroy($wm);
             return false;
         }
 
@@ -375,7 +375,7 @@ class WatermarkExtension implements ExtensionInterface
         imagefill($wmResized, 0, 0, $transparent);
 
         imagecopyresampled($wmResized, $wm, 0, 0, 0, 0, $targetW, $targetH, $wmW, $wmH);
-        imagedestroy($wm);
+        if (PHP_VERSION_ID < 80000) imagedestroy($wm);
 
         // 计算位置
         [$x, $y] = $this->calcPosition($position, $margin, $imgW, $imgH, $targetW, $targetH);
@@ -383,7 +383,7 @@ class WatermarkExtension implements ExtensionInterface
         // 叠加水印（带透明度）
         imagealphablending($canvas, true);
         $this->imageCopyMergeAlpha($canvas, $wmResized, $x, $y, 0, 0, $targetW, $targetH, $opacity);
-        imagedestroy($wmResized);
+        if (PHP_VERSION_ID < 80000) imagedestroy($wmResized);
 
         return true;
     }
@@ -743,6 +743,6 @@ class WatermarkExtension implements ExtensionInterface
         // imagecopy 遵守逐像素 alpha，正确混合 PNG 透明区域
         imagealphablending($dst, true);
         imagecopy($dst, $tmp, $dstX, $dstY, 0, 0, $srcW, $srcH);
-        imagedestroy($tmp);
+        if (PHP_VERSION_ID < 80000) imagedestroy($tmp);
     }
 }

@@ -122,7 +122,7 @@ class AliyunOssDriver implements DriverInterface
         $resp  = curl_exec($ch);
         $errno = curl_errno($ch);
         $http  = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
+        if (PHP_VERSION_ID < 80000) curl_close($ch);
 
         if ($errno || $http >= 300) {
             return false;
@@ -170,7 +170,7 @@ class AliyunOssDriver implements DriverInterface
         $resp  = curl_exec($ch);
         $errno = curl_errno($ch);
         $http  = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
+        if (PHP_VERSION_ID < 80000) curl_close($ch);
 
         return !$errno && ($http === 204 || $http === 200);
     }

@@ -240,7 +240,7 @@ class GithubDriver implements DriverInterface
         $resp = curl_exec($ch);
         $err  = curl_errno($ch);
         $http = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
+        if (PHP_VERSION_ID < 80000) curl_close($ch);
 
         if ($err || $http >= 400) {
             return false;

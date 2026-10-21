@@ -78,9 +78,15 @@ Extensions live in the `extensions/` directory and can be enabled or disabled in
 
 | Item | Minimum | Notes |
 | ---- | ------- | ----- |
-| PHP | 7.4+ | 8.0+ recommended; `curl`, `json`, and `fileinfo` extensions required |
+| PHP | 7.4+ | **Tested up to PHP 8.5**；建议 8.0+；需要 `curl`、`json`、`fileinfo` 扩展 |
 | Typecho | 1.3.0+ | Namespace-based version required |
 | OpenSSL | **1.1.0+** | Older versions may cause TLS handshake failures with Cloudflare and similar services |
+
+> **PHP 8.5 兼容说明**：从 1.2.10 起，`curl_close()` / `imagedestroy()` /
+> `finfo_close()` / `ReflectionProperty::setAccessible()` 这些自 PHP 8.5 起被标记为
+> 废弃（前三个从 8.0/8.1 起就是空操作）的调用，都改成按 `PHP_VERSION_ID` 判断后再执行。
+> 在 7.4~8.4 上行为与以往完全一致（仍然会真正释放句柄/资源），在 8.5+ 上不再产生
+> Deprecated 日志。
 
 ---
 
@@ -88,11 +94,11 @@ Extensions live in the `extensions/` directory and can be enabled or disabled in
 
 ### Option 1 — AB-Store (Recommended)
 
-Check [PicUp](https://ab-store.lhl.one/plugin/414bab94) on AB Store Web.
+Install the [AdminBeautify](https://github.com/lhl77/Typecho-Plugin-AdminBeautify) plugin, then open **AB-Store** in the admin panel, search for **PicUp**, and install with one click. Updates are delivered the same way.
 
 ### Option 2 — Manual
 
-1. Download the latest ZIP from [GitHub Releases](https://github.com/lhl77/Typecho-Plugin-PicUp/releases) / [AB Store Web](https://ab-store.lhl.one/plugin/414bab94)
+1. Download the latest ZIP from [GitHub Releases](https://github.com/lhl77/Typecho-Plugin-PicUp/releases)
 2. Extract the archive and rename the folder to `PicUp`
 3. Upload it to `usr/plugins/` in your Typecho installation
 4. Go to **Admin** → **Console** → **Plugins** → enable **PicUp**

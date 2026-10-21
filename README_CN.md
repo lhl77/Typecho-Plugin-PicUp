@@ -68,9 +68,14 @@
 
 | 项目 | 最低要求 | 说明 |
 |------|---------|------|
-| PHP | 7.4+ | 推荐 8.0+，需开启 `curl`、`json`、`fileinfo` 扩展 |
+| PHP | 7.4+ | **已适配到 PHP 8.5**；推荐 8.0+；需开启 `curl`、`json`、`fileinfo` 扩展 |
 | Typecho | 1.3.0+ | 需命名空间版本 |
 | OpenSSL | **1.1.0+** | 低于此版本可能导致连接 Cloudflare 等服务失败 |
+
+> **PHP 8.5 兼容说明**：从 1.2.10 起，`curl_close()` / `imagedestroy()` /
+> `finfo_close()` / `ReflectionProperty::setAccessible()` 这些在 PHP 8.5 中已废弃
+> （前三个自 8.0/8.1 起就是空操作）的调用，都改为先判断 `PHP_VERSION_ID` 再执行 ——
+> 7.4~8.4 上行为与以前一致（仍会真正释放句柄/资源），8.5+ 上不再刷 Deprecated 日志。
 
 
 ## 安装

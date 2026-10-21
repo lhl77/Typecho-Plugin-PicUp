@@ -198,12 +198,12 @@ class WebpExtension implements ExtensionInterface
 
         $tmpFile = @tempnam(sys_get_temp_dir(), 'picup_webp_');
         if (!$tmpFile) {
-            imagedestroy($img);
+            if (PHP_VERSION_ID < 80000) imagedestroy($img);
             return null;
         }
 
         $ok = @imagewebp($img, $tmpFile, $quality);
-        imagedestroy($img);
+        if (PHP_VERSION_ID < 80000) imagedestroy($img);
 
         if (!$ok || !is_file($tmpFile) || @filesize($tmpFile) <= 0) {
             @unlink($tmpFile);

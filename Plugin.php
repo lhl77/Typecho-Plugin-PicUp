@@ -5,7 +5,7 @@
  *
  * @package PicUp
  * @author LHL
- * @version 1.2.9
+ * @version 1.2.10
  * @link https://github.com/lhl77/Typecho-Plugin-PicUp
  */
 
@@ -287,7 +287,7 @@ class Plugin implements PluginInterface
 
                     // 2a. 更新 Widget::$row['plugin:PicUp']（protected 属性，通过父类反射访问）
                     $rowProp = (new \ReflectionClass('Typecho\Widget'))->getProperty('row');
-                    $rowProp->setAccessible(true);
+                    if (PHP_VERSION_ID < 80100) $rowProp->setAccessible(true);
                     $rowData = $rowProp->getValue($optsObj);
                     if (is_array($rowData)) {
                         $rowData['plugin:PicUp'] = $cleanedSerial;
@@ -297,7 +297,7 @@ class Plugin implements PluginInterface
                     // 2b. 清除 Options::$pluginConfig['PicUp'] 缓存，
                     //     让下次调用 plugin('PicUp') 从更新后的 row 重新反序列化
                     $pcProp = (new \ReflectionClass(Options::class))->getProperty('pluginConfig');
-                    $pcProp->setAccessible(true);
+                    if (PHP_VERSION_ID < 80100) $pcProp->setAccessible(true);
                     $pcData = $pcProp->getValue($optsObj);
                     if (is_array($pcData)) {
                         unset($pcData['PicUp']);
@@ -1249,7 +1249,7 @@ HTML;
             } elseif (function_exists('finfo_open')) {
                 $fi = finfo_open(FILEINFO_MIME_TYPE);
                 $detectedMime = (string)finfo_file($fi, $tmpPath);
-                finfo_close($fi);
+                if (PHP_VERSION_ID < 80100) finfo_close($fi);
             }
             if ($detectedMime !== '') {
                 return strpos($detectedMime, 'image/') === 0;

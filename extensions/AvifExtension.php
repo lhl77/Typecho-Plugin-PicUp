@@ -193,12 +193,12 @@ class AvifExtension implements ExtensionInterface
 
         $tmpFile = @tempnam(sys_get_temp_dir(), 'picup_avif_');
         if (!$tmpFile) {
-            imagedestroy($img);
+            if (PHP_VERSION_ID < 80000) imagedestroy($img);
             return null;
         }
 
         $ok = @imageavif($img, $tmpFile, $quality);
-        imagedestroy($img);
+        if (PHP_VERSION_ID < 80000) imagedestroy($img);
 
         if (!$ok || !is_file($tmpFile) || @filesize($tmpFile) <= 0) {
             @unlink($tmpFile);

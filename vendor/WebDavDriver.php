@@ -180,7 +180,7 @@ class WebDavDriver implements DriverInterface
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $curlErr  = curl_error($ch);
-        curl_close($ch);
+        if (PHP_VERSION_ID < 80000) curl_close($ch);
 
         if ($curlErr) {
             error_log('[PicUp][WebDAV] curlPut: cURL 错误 — ' . $curlErr);
@@ -332,7 +332,7 @@ class WebDavDriver implements DriverInterface
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $curlErr  = curl_error($ch);
-        curl_close($ch);
+        if (PHP_VERSION_ID < 80000) curl_close($ch);
 
         if ($curlErr) {
             error_log('[PicUp][WebDAV] curlRequest(' . $method . '): cURL 错误 — ' . $curlErr);
