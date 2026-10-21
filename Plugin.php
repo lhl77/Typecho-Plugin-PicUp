@@ -212,6 +212,36 @@ class Plugin implements PluginInterface
     }
 
     /**
+     * 解码 `plugin:PicUp` 的原始值。
+     *
+     * ⚠️ Typecho 1.3 用 `json_encode()` 存插件配置（见 Widget\Plugins\Config），
+     * 只有老版本/手工导入的数据才是 PHP 序列化。以前这里直接 `unserialize()`，
+     * 遇到 JSON 就会报 `unserialize(): Error at offset 0 of N bytes`，
+     * 于是清理逻辑静默返回、旧占位键永远清不掉。
+     *
+     * @return array|null 解不出来返回 null（调用方不得覆盖原值）
+     */
+    private static function decodeSettings($raw): ?array
+    {
+        $raw = (string) $raw;
+        if ($raw === '') {
+            return null;
+        }
+        $isSerialized = strpos($raw, 'a:') === 0 || $raw === 'b:0;';
+        $data = $isSerialized
+            ? @unserialize($raw, ['allowed_classes' => false])
+            : json_decode($raw, true);
+        return is_array($data) ? $data : null;
+    }
+
+    /** 按 Typecho 1.3 的格式写回插件配置（JSON） */
+    private static function encodeSettings(array $settings): string
+    {
+        $json = json_encode($settings, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        return $json === false ? '{}' : $json;
+    }
+
+    /**
      * 确保插件选项存在（用于升级迁移）。
      * 若选项不在数据库中，自动插入默认值，避免升级后未经禁用/启用导致读取报错。
      */
@@ -227,15 +257,16 @@ class Plugin implements PluginInterface
             if (!$row) {
                 return; // 插件尚未有任何配置记录
             }
-            $settings = unserialize($row['value']);
-            if (!is_array($settings)) {
-                $settings = [];
+            $settings = self::decodeSettings($row['value']);
+            if ($settings === null) {
+                /* 解不出来就不要写：以前会当成空数组，把用户整份配置洗掉 */
+                return;
             }
             if (!array_key_exists($name, $settings)) {
                 $settings[$name] = $defaultValue;
                 $db->query(
                     $db->update($table)
-                        ->rows(['value' => serialize($settings)])
+                        ->rows(['value' => self::encodeSettings($settings)])
                         ->where('name = ?', 'plugin:PicUp')
                 );
             }
@@ -251,6 +282,12 @@ class Plugin implements PluginInterface
      */
     private static function cleanupStaleOptions(): void
     {
+        static $done = false;
+        if ($done) {
+            return;   // 一次请求里调一次就够（activate() 与 config() 都会调）
+        }
+        $done = true;
+
         try {
             $db    = Db::get();
             $table = $db->getPrefix() . 'options';
@@ -260,8 +297,9 @@ class Plugin implements PluginInterface
             if (!$row) {
                 return;
             }
-            $settings = unserialize($row['value']);
-            if (!is_array($settings)) {
+            /* Typecho 1.3 存的是 JSON，老数据可能是 PHP 序列化 —— 两种都试 */
+            $settings = self::decodeSettings($row['value']);
+            if ($settings === null) {
                 return;
             }
             $dirty = false;
@@ -272,7 +310,7 @@ class Plugin implements PluginInterface
                 }
             }
             if ($dirty) {
-                $cleanedSerial = serialize($settings);
+                $cleanedSerial = self::encodeSettings($settings);   // 与 Typecho 1.3 一致：JSON
 
                 // 1. 更新数据库
                 $db->query(
@@ -714,7 +752,7 @@ END_SCRIPT;
         }
 
         // 0. 顶部插件信息 & AdminBeautify 推荐
-        $pluginVersion = '1.2.9';
+        $pluginVersion = '1.2.10';
         try {
             $siteUrl = rtrim(Options::alloc()->siteUrl, '/');
         } catch (\Throwable $e) {
@@ -1015,11 +1053,16 @@ HTML));
         // （仅在反射清理失败时起保护作用；如果反射成功，Options 内存已是干净数据，操岁不会进入此分支）
         try {
             $savedOpts = Options::alloc()->plugin('PicUp');
+            $existing  = $form->getInputs();
             foreach ($savedOpts as $key => $val) {
-                if (!$form->getInput($key)) {
+                /* ⚠️ 不要用 $form->getInput($key) 判断：它内部就是
+                   `return $this->inputs[$name]`，key 不存在时 PHP 8 会先报
+                   `Undefined array key "__picup_html_N"`（正好是这段安全网想避免的）。 */
+                if (!array_key_exists($key, $existing)) {
                     $dummy = new HtmlElement('');
                     $dummy->name = $key;
                     $form->addInput($dummy);
+                    $existing[$key] = $dummy;
                 }
             }
         } catch (\Throwable $e) {
