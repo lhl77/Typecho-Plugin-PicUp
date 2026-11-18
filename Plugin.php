@@ -1274,8 +1274,8 @@ END_SCRIPT;
             $security  = \Typecho\Widget::widget('Widget\\Security');
             $token     = $security ? $security->getToken($ajaxUrl) : '';
             $assetBase = $siteUrl . '/usr/plugins/PicUp/assets';
-            $cssVer    = @filemtime(__DIR__ . '/assets/css/picup-admin.css') ?: time();
-            $jsVer     = @filemtime(__DIR__ . '/assets/js/picup-admin.js') ?: time();
+            $cssVer    = self::assetVer('css/picup-admin.css');
+            $jsVer     = self::assetVer('js/picup-admin.js');
 
             $header .= '<script>window.__PICUP_MIG__=' . json_encode([
                 'url'     => $ajaxUrl,
@@ -1294,6 +1294,23 @@ END_SCRIPT;
     /* ------------------------------------------------------------------ */
     /*  插件配置                                                           */
     /* ------------------------------------------------------------------ */
+
+    /**
+     * 静态资源的缓存版本号。
+     *
+     * 用 `mtime-size` 而不是插件版本号：版本号固定为 1.3.0，改了文件但没发版时
+     * 浏览器 / CDN 会一直吐旧文件（`picup-config.css` 曾经就没带任何版本号）。
+     * 每次部署文件被覆盖 → mtime 变化 → URL 变化，一定能取到新内容。
+     */
+    private static function assetVer(string $rel): string
+    {
+        $file  = __DIR__ . '/assets/' . ltrim($rel, '/');
+        $mtime = @filemtime($file);
+        if ($mtime === false) {
+            return (string)time();
+        }
+        return $mtime . '-' . (int)@filesize($file);
+    }
 
     public static function config(Form $form)
     {
@@ -1322,7 +1339,7 @@ END_SCRIPT;
 
         // ── 外置 CSS ──
         $form->addItem(new HtmlElement(
-            '<link rel="stylesheet" href="' . $assetsUrl . '/css/picup-config.css">'
+            '<link rel="stylesheet" href="' . $assetsUrl . '/css/picup-config.css?v=' . self::assetVer('css/picup-config.css') . '">'
         ));
 
         // ── 数据注入脚本（所有 JS 模块依赖的 PHP 数据）──
@@ -1654,7 +1671,7 @@ HTML));
 
         // ── 外置 JS（放最后，确保 DOM 已渲染）──
         $form->addItem(new HtmlElement(
-            '<script src="' . $assetsUrl . '/js/picup-config.js"></script>'
+            '<script src="' . $assetsUrl . '/js/picup-config.js?v=' . self::assetVer('js/picup-config.js') . '"></script>'
         ));
     }
 
