@@ -108,6 +108,8 @@
         var replaceCb = card.querySelector('#pfp-replace');
         var runBtn    = card.querySelector('#pfp-run');
         var curLabel  = card.querySelector('#pfp-current');
+        /* profile → {virtual, label}：区分「真方案」与「历史链接」用（提示语 / 下拉文案） */
+        var profileMeta = {};
 
         function setResult(html, cls) {
             resultBox.innerHTML = html ? '<span class="' + (cls || '') + '">' + html + '</span>' : '';
@@ -130,16 +132,16 @@
                 }
                 var d = res.data || {};
                 var profs = d.profiles || [];
-                if (d.path) { curLabel.textContent = '当前：' + d.path; }
+                if (d.path) { curLabel.textContent = '当前：' + (d.displayPath || d.path); }
 
                 if (!profs.length) {
                     linksBox.innerHTML = '<div class="pfp-empty">该文件还没有备份记录（上传时未开启自动备份）</div>';
                 } else {
                     var html = '';
                     profs.forEach(function (p) {
-                        html += '<div class="pfp-link' + (p.current ? ' is-current' : '') + '">'
-                             +   '<span class="pfp-prof">' + esc(p.profile) + '</span>'
-                             +   '<a class="pfp-url" href="' + esc(p.url) + '" target="_blank" rel="noopener noreferrer">' + esc(p.url) + '</a>'
+                        html += '<div class="pfp-link' + (p.current ? ' is-current' : '') + (p.virtual ? ' is-virtual' : '') + '">'
+                             +   '<span class="pfp-prof" title="' + esc(p.profile) + '">' + esc(p.label || p.profile) + '</span>'
+                             +   '<a class="pfp-url" href="' + esc(p.display || p.url) + '" target="_blank" rel="noopener noreferrer">' + esc(p.display || p.url) + '</a>'
                              +   (p.current
                                     ? '<span class="pfp-tag">当前</span>'
                                     : '<button type="button" class="pfp-mini" data-profile="' + esc(p.profile) + '">设为当前</button>')
@@ -157,13 +159,19 @@
                 // 目标下拉：配置里的方案 + 记录里出现过的方案名
                 var names = [];
                 var curProf = '';
-                profs.forEach(function (p) { if (p.current) { curProf = p.profile; } });
+                var meta = {};
+                profs.forEach(function (p) {
+                    if (p.current) { curProf = p.profile; }
+                    meta[p.profile] = { virtual: !!p.virtual, label: p.label || p.profile };
+                });
                 (d.options || []).forEach(function (n) { names.push({ v: n, label: n + '（方案）' }); });
                 profs.forEach(function (p) {
                     if ((d.options || []).indexOf(p.profile) === -1) {
-                        names.push({ v: p.profile, label: p.profile + '（已备份链接）' });
+                        // 历史链接：带上原始键名，避免多条都显示成「原链接」
+                        names.push({ v: p.profile, label: (p.label || p.profile) + '（' + p.profile + '）' });
                     }
                 });
+                profileMeta = meta;
                 targetSel.innerHTML = names.length
                     ? names.map(function (n) { return '<option value="' + esc(n.v) + '">' + esc(n.label) + '</option>'; }).join('')
                     : '<option value="">（没有可用方案）</option>';
@@ -205,7 +213,9 @@
                 applyNewUrl(d.url);
                 var s = d.stats || {};
                 var tail = (s.total ? '；同时替换了 ' + s.total + ' 处引用（附件 ' + s.attachments + ' / 文章 ' + s.posts + '）' : '');
-                setResult('迁移完成 → ' + esc(target) + '（原方案的链接已保留）' + tail, 'is-ok');
+                // 切到历史链接时没有「原方案链接被保留」这回事，不加尾巴
+                var keep = (profileMeta[target] && profileMeta[target].virtual) ? '' : '（原方案的链接已保留）';
+                setResult('迁移完成 → ' + esc((profileMeta[target] && profileMeta[target].label) || target) + keep + tail, 'is-ok');
                 loadLinks();
             }).catch(function () {
                 runBtn.dataset.busy = '';

@@ -328,13 +328,34 @@ class Api
             [str_replace('/', '\\/', $old), str_replace('/', '\\/', $new)],
         ];
 
+        // 复合存储路径（`nodeimage://id|https://…`）：附件里存的是整串，文章里用的是后段
+        // 真正的 http 地址。两类行必须用各自的替换规则 —— 把复合串写进正文会变成坏链接。
+        $pubOld = Plugin::publicUrl($old);
+        $pubNew = Plugin::publicUrl($new);
+        if ($pubOld === '') {
+            $pubOld = $old;
+        }
+        if ($pubNew === '') {
+            $pubNew = $new;
+        }
+
+        $pairsStore = [
+            [$old, $new],
+            [str_replace('/', '\\/', $old), str_replace('/', '\\/', $new)],
+        ];
+        $pairsPublic = [
+            [$pubOld, $pubNew],
+            [str_replace('/', '\\/', $pubOld), str_replace('/', '\\/', $pubNew)],
+        ];
+
         // ⚠️ 只拿**文件名**做 LIKE 粗筛：库里的地址可能是明文 `http://…`，也可能是 JSON 转义的
         // `http:\/\/…`；而 `\/` 在三种数据库的 LIKE 里语义还不一样（MySQL 当转义符、SQLite/PG
         // 当字面量），拿整条 URL 去 LIKE 必然有一边匹配不到。文件名两种写法里都一样，
         // 精确的替换在 PHP 里做，粗筛多抓几行无所谓。
-        $anchor = (string)basename((string)(parse_url($old, PHP_URL_PATH) ?: ''));
+        $anchorSrc = preg_match('#^https?://#i', $pubOld) ? $pubOld : $old;
+        $anchor    = (string)basename((string)(parse_url($anchorSrc, PHP_URL_PATH) ?: ''));
         if ($anchor === '') {
-            $anchor = $old;
+            $anchor = $anchorSrc;
         }
 
         $db = Db::get();
@@ -349,8 +370,10 @@ class Api
         }
 
         foreach ($rows ?: [] as $row) {
-            $text = (string)$row['text'];
-            $next = $text;
+            $text  = (string)$row['text'];
+            $next  = $text;
+            // 附件行存的是「存储值」，文章行存的是「公网地址」，规则不同（见上面的 $pairs*）
+            $pairs = ((string)$row['type'] === 'attachment') ? $pairsStore : $pairsPublic;
             foreach ($pairs as $pair) {
                 $next = str_replace($pair[0], $pair[1], $next);
             }
@@ -612,23 +635,30 @@ class Api
             $links = [($guess !== '' ? $guess : '(当前)') => $att['path']];
         }
 
+        $realProfiles = Plugin::getProfileNames();
         $profiles = [];
         foreach ($links as $name => $url) {
+            $isReal = in_array((string)$name, $realProfiles, true);
             $profiles[] = [
                 'profile' => (string)$name,
+                // 非真方案键（`(原方案)` / `(当前)` 这类历史链接）在界面上统一叫「原链接」
+                'label'   => $isReal ? (string)$name : '原链接',
+                'virtual' => !$isReal,
                 'url'     => (string)$url,
+                'display' => Plugin::publicUrl((string)$url),
                 'current' => ((string)$url === $att['path']),
             ];
         }
 
         return [
-            'ok'       => true,
-            'cid'      => $cid,
-            'name'     => $att['name'],
-            'path'     => $att['path'],
-            'hasRow'   => (bool)$row,
-            'profiles' => $profiles,
-            'options'  => Plugin::getProfileNames(),
+            'ok'          => true,
+            'cid'         => $cid,
+            'name'        => $att['name'],
+            'path'        => $att['path'],
+            'displayPath' => Plugin::publicUrl($att['path']),
+            'hasRow'      => (bool)$row,
+            'profiles'    => $profiles,
+            'options'     => $realProfiles,
         ];
     }
 
@@ -643,9 +673,6 @@ class Api
         $target = trim($target);
         if ($cid <= 0 || $target === '') {
             return ['ok' => false, 'error' => '参数错误：缺少 cid 或目标方案', 'code' => 400];
-        }
-        if (!in_array($target, Plugin::getProfileNames(), true)) {
-            return ['ok' => false, 'error' => '方案「' . $target . '」不存在，可用方案：' . implode('、', Plugin::getProfileNames()), 'code' => 400];
         }
 
         Plugin::ensureLinksCidColumn();
@@ -664,6 +691,25 @@ class Api
         $rows = self::linksRowsAll();
         $row  = self::findRowForAttachment($rows, $cid, $old);
         $links = $row ? ($row['links'] ?: []) : [];
+
+        // 目标可以是「真方案」，也可以是记录里已有的**历史链接**
+        // （例如 `(原方案)` —— 当初反推不出方案名时留下的键）。
+        // 后者不需要上传，直接把 path 指回去即可，否则用户就没法切回迁移前的图。
+        $realProfiles = Plugin::getProfileNames();
+        $isRealTarget = in_array($target, $realProfiles, true);
+        if (!$isRealTarget && (!isset($links[$target]) || (string)$links[$target] === '')) {
+            $known = array_values(array_unique(array_filter(
+                array_merge($realProfiles, array_keys($links)),
+                function ($n) {
+                    return is_string($n) && trim($n) !== '';
+                }
+            )));
+            return [
+                'ok'    => false,
+                'error' => '方案「' . $target . '」不存在，可用方案：' . implode('、', $known),
+                'code'  => 400,
+            ];
+        }
 
         // 先备份、再替换：把「当前这条」链接记到它所属的方案名下，
         // 这样迁移到别的方案后原方案的链接仍然保留（还能在详情页一键切回）。
@@ -690,7 +736,9 @@ class Api
             if (!$tmp) {
                 return ['ok' => false, 'error' => '下载原文件失败，无法迁移', 'code' => 500];
             }
-            $ext  = $att['type'] !== '' ? $att['type'] : strtolower((string)pathinfo(parse_url($old, PHP_URL_PATH) ?: '', PATHINFO_EXTENSION));
+            // 复合存储路径要归一化后再取扩展名（否则 parse_url 拿不到 path）
+            $oldPublic = Plugin::publicUrl($old);
+            $ext  = $att['type'] !== '' ? $att['type'] : strtolower((string)pathinfo(parse_url($oldPublic, PHP_URL_PATH) ?: '', PATHINFO_EXTENSION));
             $mime = $att['mime'] !== '' ? $att['mime'] : 'application/octet-stream';
             $new  = (string)Plugin::uploadFileToProfile($target, $tmp, $mime, $ext);
             @unlink($tmp);

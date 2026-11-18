@@ -67,6 +67,13 @@
     background:color-mix(in srgb,var(--md-primary,#6750a4) 14%,transparent)!important;
     color:var(--md-primary,#6750a4)!important;
 }
+/* 历史链接（`(原方案)` 这类反推不出方案名的条目）：中性色 + 虚线边框，
+   和真方案的胶囊区分开，避免被误当成可选方案 */
+.pfp-link.is-virtual .pfp-prof{
+    background:color-mix(in srgb,var(--md-on-surface,#1c1b1f) 8%,transparent)!important;
+    color:var(--md-on-surface-variant,#49454f)!important;
+    border:1px dashed color-mix(in srgb,var(--md-outline,#79747e) 75%,transparent)!important;
+}
 .pfp-url{
     flex:1!important;min-width:0!important;
     overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;

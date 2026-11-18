@@ -5,7 +5,7 @@
  *
  * @package PicUp
  * @author LHL
- * @version 1.3.0
+ * @version 1.3.1
  * @link https://github.com/lhl77/Typecho-Plugin-PicUp
  */
 
@@ -600,10 +600,44 @@ class Plugin implements PluginInterface
     }
 
     /**
+     * 把「存储路径」归一化成真正的可访问 URL。
+     *
+     * 有些驱动为了支持删除会把附件 path 存成复合值，例如 NodeImage：
+     *   `nodeimage://<image_id>|https://cdn.example.com/a.png`
+     * 下载 / 判断方案 / 给用户展示时都只能用 `|` 后面那段真正的地址。
+     */
+    public static function publicUrl(string $stored): string
+    {
+        $stored = trim($stored);
+        if ($stored === '') {
+            return '';
+        }
+        if (preg_match('#^https?://#i', $stored)) {
+            return $stored;
+        }
+        if (strpos($stored, '|') !== false) {
+            foreach (explode('|', $stored) as $part) {
+                $part = trim($part);
+                if (preg_match('#^https?://#i', $part)) {
+                    return $part;
+                }
+            }
+        }
+        // 兜底：从整串里捞第一个 http(s) 地址
+        if (preg_match('#https?://[^\s|]+#i', $stored, $m)) {
+            return $m[0];
+        }
+        return $stored;
+    }
+
+    /**
      * 把远端文件下载到临时文件（本站 URL 优先直接读磁盘），失败返回 null。
      */
     public static function downloadToTemp(string $url): ?string
     {
+        // 复合存储路径（`nodeimage://id|https://…`）要先取出真正的 http 地址，否则 curl 必失败
+        $url = self::publicUrl($url);
+
         $tmp = @tempnam(sys_get_temp_dir(), 'picup_mig_');
         if (!$tmp) {
             return null;
@@ -636,7 +670,7 @@ class Plugin implements PluginInterface
                     CURLOPT_MAXREDIRS      => 3,
                     CURLOPT_TIMEOUT        => 30,
                     CURLOPT_CONNECTTIMEOUT => 10,
-                    CURLOPT_USERAGENT      => 'PicUp-Migrate/1.3',
+                    CURLOPT_USERAGENT      => 'PicUp-Migrate/1.3.1',
                 ]);
                 $ok   = curl_exec($ch);
                 $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -734,7 +768,7 @@ class Plugin implements PluginInterface
      */
     public static function guessProfileForUrl(string $url): string
     {
-        $url = trim($url);
+        $url = self::publicUrl(trim($url));
         if ($url === '') {
             return '';
         }
@@ -780,6 +814,22 @@ class Plugin implements PluginInterface
                 }
                 // 附件也可能存成相对地址（`/usr/uploads/...`）
                 $bases[] = '/' . $dir;
+            }
+
+            // 通用兜底：配置里任何像域名的字符串都参与匹配
+            // （很多驱动用的是自定义域名 / 公开访问域名，键名五花八门：s.ee、R2 的 pub 域名…）
+            foreach ($cfg as $v) {
+                if (!is_string($v)) {
+                    continue;
+                }
+                $v = trim($v);
+                if ($v === '' || strlen($v) < 4 || strpos($v, ' ') !== false) {
+                    continue;
+                }
+                if (strpos($v, '.') === false) {
+                    continue;   // 至少得像个域名
+                }
+                $bases[] = rtrim($v, '/');
             }
 
             foreach ($bases as $base) {
@@ -1298,7 +1348,7 @@ END_SCRIPT;
     /**
      * 静态资源的缓存版本号。
      *
-     * 用 `mtime-size` 而不是插件版本号：版本号固定为 1.3.0，改了文件但没发版时
+     * 用 `mtime-size` 而不是插件版本号：版本号改动不频繁（现在 1.3.1），改了文件但没发版时
      * 浏览器 / CDN 会一直吐旧文件（`picup-config.css` 曾经就没带任何版本号）。
      * 每次部署文件被覆盖 → mtime 变化 → URL 变化，一定能取到新内容。
      */
@@ -1324,7 +1374,7 @@ END_SCRIPT;
         }
 
         // 0. 顶部插件信息 & AdminBeautify 推荐
-        $pluginVersion = '1.3.0';
+        $pluginVersion = '1.3.1';
         try {
             $siteUrl = rtrim(Options::alloc()->siteUrl, '/');
         } catch (\Throwable $e) {
