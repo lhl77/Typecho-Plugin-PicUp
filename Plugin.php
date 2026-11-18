@@ -1315,19 +1315,10 @@ END_SCRIPT;
         }
         $assetsUrl = $siteUrl . '/usr/plugins/PicUp/assets';
 
-        // 仅当 AB Admin 已启用（plugin:AdminBeautify 选项存在）时才提供 AB Store 一键更新入口
-        $abStoreActive = false;
-        try {
-            $abRow = Db::get()->fetchRow(
-                Db::get()->select('value')->from('table.options')->where('name = ?', 'plugin:AdminBeautify')
-            );
-            $abStoreActive = !empty($abRow);
-        } catch (\Throwable $e) {
-            $abStoreActive = false;
-        }
-        $adminExtendingUrl = $abStoreActive
-            ? ($siteUrl . '/admin/extending.php?panel=AdminBeautifyStore%2FPanel.php')
-            : '';
+        // 「前往商店更新」入口：AB Store 从 AB Admin 2.1.62 起并入了「控制台 → 插件」，
+        // 这里按站点实际情况解析（新版内置商店 / 仅装旧 AB Store / 都没有）
+        $storeEntry = self::resolveStoreEntry();
+        $adminExtendingUrl = $storeEntry['url'];
 
         // ── 外置 CSS ──
         $form->addItem(new HtmlElement(
@@ -1401,6 +1392,9 @@ END_SCRIPT;
         $picupData = json_encode([
             'version'           => $pluginVersion,
             'adminExtendingUrl' => $adminExtendingUrl,
+            'storeUrl'          => $storeEntry['url'],
+            'storeLabel'        => $storeEntry['label'],
+            'storeMode'         => $storeEntry['mode'],
             'ghRepo'            => 'lhl77/Typecho-Plugin-PicUp',
             'driverNames'       => $driverNames,
             'extNames'          => $extNames,
@@ -1665,6 +1659,88 @@ HTML));
     }
 
     public static function personalConfig(Form $form) {}
+
+        /**
+         * 解析「前往商店更新」的入口。
+         *
+         * AB Store 的历史演变：
+         *   - AB Admin ≥ 2.1.62：商店**并入**「控制台 → 插件」，地址是 `admin/plugins.php?tab=update`
+         *   - 更早：商店是独立插件 `AdminBeautifyStore`，地址是
+         *     `admin/extending.php?panel=AdminBeautifyStore%2FPanel.php`
+         *   - 也可能两者都没有
+         *
+         * @return array{url:string,label:string,mode:string} mode: builtin|legacy|none
+         */
+        private static function resolveStoreEntry(): array
+        {
+            $none = ['url' => '', 'label' => '', 'mode' => 'none'];
+
+            try {
+                $options  = Options::alloc();
+                $adminUrl = rtrim((string)$options->adminUrl, '/');
+            } catch (\Throwable $e) {
+                $adminUrl = '';
+            }
+            if ($adminUrl === '') {
+                return $none;
+            }
+
+            $pluginRoot = (defined('__TYPECHO_ROOT_DIR__') ? __TYPECHO_ROOT_DIR__ : '')
+                . (defined('__TYPECHO_PLUGIN_DIR__') ? __TYPECHO_PLUGIN_DIR__ : '/usr/plugins');
+
+            // 已启用的插件（面板/页面只有启用后才会被渲染）
+            $activated = [];
+            try {
+                $exported  = \Typecho\Plugin::export();
+                $activated = isset($exported['activated']) && is_array($exported['activated'])
+                    ? $exported['activated'] : [];
+            } catch (\Throwable $e) {
+                $activated = [];
+            }
+
+            // ① 新版 AB Admin 的内置商店
+            $abDir = $pluginRoot . '/AdminBeautify';
+            if (isset($activated['AdminBeautify']) && is_file($abDir . '/store/Core.php')) {
+                $abVer = '';
+                try {
+                    $info  = \Typecho\Plugin::parseInfo($abDir . '/Plugin.php');
+                    $abVer = isset($info['version']) ? (string)$info['version'] : '';
+                } catch (\Throwable $e) {
+                    $abVer = '';
+                }
+
+                $storeOn = !is_file($abDir . '/store/disabled');
+                if ($storeOn) {
+                    try {
+                        $abOpts = Options::alloc()->plugin('AdminBeautify');
+                        if ((string)($abOpts->storeEnabled ?? '1') === '0') {
+                            $storeOn = false;
+                        }
+                    } catch (\Throwable $e) {
+                        // 读不到就按默认（开启）处理
+                    }
+                }
+
+                if ($storeOn && $abVer !== '' && version_compare($abVer, '2.1.62', '>=')) {
+                    return [
+                        'url'   => $adminUrl . '/plugins.php?tab=update',
+                        'label' => '前往插件商店更新',
+                        'mode'  => 'builtin',
+                    ];
+                }
+            }
+
+            // ② 独立的旧 AB Store 插件（没有 AB Admin，或 AB Admin 版本太旧）
+            if (isset($activated['AdminBeautifyStore']) && is_file($pluginRoot . '/AdminBeautifyStore/Panel.php')) {
+                return [
+                    'url'   => $adminUrl . '/extending.php?panel=AdminBeautifyStore%2FPanel.php',
+                    'label' => '前往 AB Store 更新',
+                    'mode'  => 'legacy',
+                ];
+            }
+
+            return $none;
+        }
 
         /**
          * 构建设置摘要卡片（当前方案、驱动、插件一览），在全局设置上方。

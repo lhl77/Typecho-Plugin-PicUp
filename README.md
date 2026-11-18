@@ -118,6 +118,10 @@
 
 安装 [AB Admin](https://ab.lhl.one) 插件后，进入后台 **控制台** → **插件** → **AB-Store** 应用商店，搜索 **PicUp** 即可一键安装并获取后续更新。
 
+> 插件设置页右上角的「检查更新」发现新版本时，会自动按站点情况给出入口：
+> 新版 AB Admin（≥ 2.1.62，商店已并入「控制台 → 插件」）跳转到 **插件 → 可更新**；
+> 只装了旧版独立 AB Store 的站点跳到它自己的面板；两者都没有时只保留 GitHub Release 链接。
+
 ### 方式二：手动安装
 
 1. 下载最新 [Release](https://github.com/lhl77/Typecho-Plugin-PicUp/releases) 压缩包，或从 [AB Store Web](https://ab-store.lhl.one/plugin/414bab94) 下载

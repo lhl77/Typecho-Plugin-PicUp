@@ -13,6 +13,11 @@ if (!P) { return; }
  * ======================================================================== */
 var __PICUP_VER__ = P.version;
 var __PICUP_ADMIN_EXTENDING_URL__ = P.adminExtendingUrl || '';
+/* AB Store 已并入 AB Admin 的「控制台 → 插件」；storeUrl 由 PHP 按站点实际情况解析：
+   新版 AB Admin → plugins.php?tab=update，旧版独立 AB Store → extending.php?panel=…，
+   都没有 → 空字符串（只留 GitHub Release） */
+var __PICUP_STORE_URL__ = P.storeUrl || __PICUP_ADMIN_EXTENDING_URL__ || '';
+var __PICUP_STORE_LABEL__ = P.storeLabel || '前往商店更新';
 var __PICUP_GH_REPO__ = P.ghRepo || 'lhl77/Typecho-Plugin-PicUp';
 
 function compareVer(a,b){
@@ -39,11 +44,11 @@ function stripVerTag(tag){return (tag||'').replace(/^v/i,'');}
     function renderResult(hasUpdate){
         var curVer=stripVerTag(__PICUP_VER__);
         if(hasUpdate){
-            var adminUrl=__PICUP_ADMIN_EXTENDING_URL__||'';
+            var adminUrl=__PICUP_STORE_URL__||'';
             var releaseUrl=latestUrl||('https://github.com/'+__PICUP_GH_REPO__+'/releases/tag/'+(latestTag||''));
             var storeHtml=adminUrl
-                ? '<a class="pu-update-act pu-store" href="'+adminUrl+'" target="_blank">前往 AB Store 更新</a>'
-                : '<span class="pu-update-act pu-no-store">不支持 AB Store 一键升级</span>';
+                ? '<a class="pu-update-act pu-store" href="'+adminUrl+'" target="_blank">'+__PICUP_STORE_LABEL__+'</a>'
+                : '<span class="pu-update-act pu-no-store">未检测到插件商店，请手动下载更新</span>';
             result.innerHTML=''
                 +'发现新版本 <span class="pu-latest-ver">'+latestTag+'</span>'
                 +'（当前 v'+curVer+'）'
