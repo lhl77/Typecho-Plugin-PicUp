@@ -1432,17 +1432,21 @@ END_SCRIPT;
 </div>
 <div class="picup-info-bar">
   <div class="picup-info-card">
-    <h4 class="picup-info-title">PicUp — 多存储后端上传&处理插件 <small>by LHL</small></h4>
+    <div class="picup-info-head">
+      <span class="picup-brand" aria-hidden="true"></span>
+      <div class="picup-info-actions">
+        <span class="picup-ver-badge" id="picup-ver-badge">v{$pluginVersion}</span>
+        <button type="button" id="picup-check-update-btn" class="picup-update-btn">
+          <span class="picup-update-dot" id="picup-update-dot"></span>检查更新
+        </button>
+      </div>
+    </div>
+    <h4 class="picup-info-title">多存储后端上传 &amp; 处理插件</h4>
     <div class="picup-info-meta">
+      <span class="pu-by">by LHL</span><span class="pu-sep">·</span>
       <a href="https://blog.lhl.one" target="_blank">作者博客</a><span class="pu-sep">·</span>
       <a href="https://github.com/lhl77/Typecho-Plugin-PicUp" target="_blank">GitHub</a><span class="pu-sep">·</span>
       <a href="https://blog.lhl.one/artical/1026.html" target="_blank">使用文档</a>
-    </div>
-    <div class="picup-info-actions">
-      <span class="picup-ver-badge" id="picup-ver-badge">v{$pluginVersion}</span>
-      <button type="button" id="picup-check-update-btn" class="picup-update-btn">
-        <span class="picup-update-dot" id="picup-update-dot"></span>检查更新
-      </button>
     </div>
     <div id="picup-update-result" class="picup-update-result" style="display:none;"></div>
   </div>
@@ -1668,20 +1672,11 @@ HTML));
          */
         private static function buildSummaryCardHtml(): string
         {
-            // 插件 Logo（直接用外链图片，不占插件体积）
-            $logoUrl = 'https://i.see.you/2026/07/26/5dnU/6cf4c80b939c47baefb00b66bd567b8a.jpg';
-
             return <<<HTML
 <ul class="typecho-option" id="typecho-option-item-picup-summary"><li>
 <div id="picup-summary-card" class="picup-summary-card">
   <div class="psc-head">
-    <div class="psc-brand">
-      <img class="psc-logo" src="{$logoUrl}" alt="PicUp" referrerpolicy="no-referrer">
-      <div class="psc-brand-txt">
-        <span class="psc-title">设置摘要</span>
-        <span class="psc-subtitle">多存储后端图片 / 附件上传</span>
-      </div>
-    </div>
+    <span class="psc-title">设置摘要</span>
     <span class="psc-badge" id="psc-badge">—</span>
   </div>
   <div class="psc-grid" id="psc-grid">

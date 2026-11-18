@@ -406,7 +406,10 @@ git clone https://github.com/lhl77/Typecho-Plugin-PicUp.git PicUp
 ```
 PicUp/
 ├── Plugin.php                      # 插件主文件
+├── Api.php                         # 可复用的接口层（后台 Ajax 与 AB AI 助手共用）
+├── Action.php                      # action/picup-backup 路由
 ├── README.md
+├── assets/
 ├── vendor/                         # 存储驱动
 └── extensions/                     # 图像处理扩展
 ```
