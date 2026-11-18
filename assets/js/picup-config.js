@@ -171,6 +171,40 @@ function stripVerTag(tag){return (tag||'').replace(/^v/i,'');}
     document.addEventListener('ab:pageload',initPromoteModal);
 })();
 
+/* ── 离开本页时清理 body 级浮层（分享弹窗 / 图片全屏预览）与滚动锁 ──
+ *
+ * 这两个浮层都被 appendChild 到 <body>，而 AB Admin 的 AJAX 无刷新导航只替换主内容区，
+ * 不会清理 body 子节点；同时 picup-config.css 是随配置表单渲染的 <link>，离开本页后
+ * 会被一起移除 → 残留的浮层失去样式，在新页面左下角露出一块无样式内容（还会锁住滚动）。
+ */
+(function(){
+    function cleanupBodyOverlays(){
+        // 仍停在 PicUp 设置页（触发按钮还在）就不动，避免误删新页面的弹窗
+        if(document.getElementById('picup-promote-open')){ return; }
+
+        var mask=document.getElementById('picup-promote-modal-mask');
+        if(mask && mask.parentNode===document.body){
+            mask.classList.remove('is-open');
+            mask.setAttribute('aria-hidden','true');
+            mask.parentNode.removeChild(mask);
+        }
+
+        var viewers=document.querySelectorAll('body > .picup-ab-fullscreen');
+        for(var i=viewers.length-1;i>=0;i--){
+            if(viewers[i].parentNode){ viewers[i].parentNode.removeChild(viewers[i]); }
+        }
+
+        // 弹窗打开时锁了 html 滚动，离开页面要解锁（导航抽屉打开时不动）
+        var de=document.documentElement;
+        if(de.style.overflow==='hidden' && !de.classList.contains('nav-open')){
+            de.style.overflow='';
+        }
+    }
+
+    document.addEventListener('ab:pageload',cleanupBodyOverlays);
+    window.addEventListener('pagehide',cleanupBodyOverlays);
+})();
+
 /* ========================================================================
  * 2. buildSummaryCardHtml() — Summary card
  * ======================================================================== */
@@ -1073,10 +1107,11 @@ function runCollapse(){
         findUlOrCard(document.querySelector('input[name="defaultProfile"]')),
         findUlOrCard(document.querySelector('input[name="storagePathTemplate"]'))
     ],'全局设置','global',false);
-    /* JSON 配置：configJson + suffixProfiles */
+    /* JSON 配置：configJson + suffixProfiles + backupProfiles */
     groupCollapse([
         findUlOrCard(document.querySelector('textarea[name="configJson"]')),
-        findUlOrCard(document.querySelector('textarea[name="suffixProfiles"]'))
+        findUlOrCard(document.querySelector('textarea[name="suffixProfiles"]')),
+        findUlOrCard(document.querySelector('textarea[name="backupProfiles"]'))
     ],'JSON 配置','json',false);
     /* 配置备份 */
     var bk=document.getElementById('typecho-option-item-picup-backup');
@@ -1097,4 +1132,348 @@ document.addEventListener('ab:pageload',function(){
 });
 })();
 
+})();
+
+/* ========================================================================
+ * 10. 自动备份面板 (#picup-mbp)
+ *     - 折叠头复用 window.picupAddCollapse
+ *     - 复选框变动 → 即时保存到插件选项（不用点整页「保存设置」）
+ *     - 「开启自动备份」→ ajax 建表，成功后原地刷新
+ *     - 链接查看器：搜索 + 分页
+ * ======================================================================== */
+(function(){
+    function esc(s){
+        return String(s==null?'':s)
+            .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+            .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function init(){
+        var panel=document.getElementById('picup-mbp');
+        if(!panel || panel.dataset.mbpInit==='1') return;
+        panel.dataset.mbpInit='1';
+
+        var url=panel.dataset.url||'';
+        var token=panel.dataset.token||'';
+        var tableName=panel.dataset.table||'PicUpLinks';
+        var ready=panel.dataset.ready==='1';
+
+        var statusBox=document.getElementById('picup-mbp-status');
+        var listBox=document.getElementById('picup-mbp-list');
+        var qInput=document.getElementById('picup-mbp-q');
+        var hidden=document.querySelector('textarea[name="backupProfiles"],input[name="backupProfiles"]');
+        var page=1, total=0, limit=20, busy=false, saveTimer=null, searchTimer=null, noteEl=null;
+
+        /* ---- 折叠头（复用统一实现），并在标题后挂状态徽标 ---- */
+        if(window.picupAddCollapse){ window.picupAddCollapse(panel,'自动备份 <span class="picup-beta">Beta</span>','mbp',true); }
+        var hdrTitle=panel.parentNode ? panel.parentNode.querySelector('.picup-collapse-hdr .pch-title') : null;
+        if(hdrTitle && !hdrTitle.querySelector('.picup-mbp-badge')){
+            var b=document.createElement('span');
+            b.className='picup-mbp-badge';
+            b.id='picup-mbp-badge';
+            hdrTitle.appendChild(b);
+        }
+
+        function post(doName,extra){
+            var fd=new FormData(); fd.append('do',doName); fd.append('_',token);
+            if(extra){ Object.keys(extra).forEach(function(k){ fd.append(k,extra[k]); }); }
+            return fetch(url,{method:'POST',body:fd,credentials:'same-origin'})
+                .then(function(r){ return r.json(); });
+        }
+
+        function setBadge(){
+            var el=document.getElementById('picup-mbp-badge');
+            if(!el) return;
+            el.textContent = ready ? '已开启' : '未开启';
+            el.className='picup-mbp-badge '+(ready?'is-on':'is-off');
+        }
+
+        function setStatus(html){ if(statusBox) statusBox.innerHTML=html; }
+
+        function selectedProfiles(){
+            return [].slice.call(document.querySelectorAll('#picup-mbp-profiles .picup-mbp-cb'))
+                .filter(function(c){ return c.checked; })
+                .map(function(c){ return c.value; });
+        }
+
+        function syncHidden(){
+            if(hidden){ hidden.value=JSON.stringify(selectedProfiles()); }
+        }
+
+        function flashNote(msg,isErr){
+            if(!noteEl){
+                noteEl=document.createElement('span');
+                noteEl.className='picup-mbp-note';
+                if(statusBox){ statusBox.appendChild(noteEl); }
+            }
+            noteEl.textContent=msg;
+            noteEl.style.color=isErr?'#b3261e':'#6750a4';
+            clearTimeout(noteEl._t);
+            noteEl._t=setTimeout(function(){ if(noteEl){ noteEl.textContent=''; } },3200);
+        }
+
+        /* ---- 复选框：勾选即保存 ---- */
+        function bindChecks(){
+            var box=document.getElementById('picup-mbp-profiles');
+            if(!box || box.dataset.bound==='1') return;
+            box.dataset.bound='1';
+            box.addEventListener('change',function(e){
+                if(!e.target || !e.target.classList.contains('picup-mbp-cb')) return;
+                syncHidden();
+                clearTimeout(saveTimer);
+                saveTimer=setTimeout(function(){
+                    var list=selectedProfiles();
+                    post('links-profiles',{profiles:JSON.stringify(list)}).then(function(res){
+                        if(res && res.code===0){
+                            flashNote(list.length ? '已保存：'+list.length+' 个备份方案' : '已清空备份方案');
+                        }else{
+                            flashNote((res&&res.message)||'保存失败',true);
+                        }
+                    }).catch(function(){ flashNote('保存失败：网络错误',true); });
+                },320);
+            });
+        }
+
+        /* ---- 建表（防重复点击 + 成功后就地刷新） ---- */
+        function bindCreate(){
+            var btn=document.getElementById('picup-mbp-create');
+            if(!btn || btn.dataset.bound==='1') return;
+            btn.dataset.bound='1';
+            btn.addEventListener('click',function(){
+                if(btn.dataset.busy==='1') return;
+                btn.dataset.busy='1';
+                btn.disabled=true;
+                var old=btn.textContent;
+                btn.textContent='创建中…';
+                post('links-create').then(function(res){
+                    if(res && res.code===0){
+                        ready=true;
+                        panel.dataset.ready='1';
+                        setBadge();
+                        setStatus('<span class="picup-mbp-ok">已开启</span>'
+                            + '<span class="picup-mbp-count">已记录 <b>0</b> 条上传链接</span>');
+                        loadList(1);
+                    }else{
+                        btn.disabled=false;
+                        btn.dataset.busy='';
+                        btn.textContent=old;
+                        setStatus('<span class="picup-mbp-warn">创建失败</span>'
+                            + '<span class="picup-mbp-need">'+esc((res&&res.message)||'')
+                            + '（表名 <code>'+esc(tableName)+'</code>）</span>');
+                    }
+                }).catch(function(){
+                    btn.disabled=false;
+                    btn.dataset.busy='';
+                    btn.textContent=old;
+                    setStatus('<span class="picup-mbp-warn">创建失败</span>'
+                        + '<span class="picup-mbp-need">网络错误，请重试</span>');
+                });
+            });
+        }
+
+        /* ---- 链接查看器 ---- */
+        function renderList(data){
+            if(!listBox) return;
+            var list=(data&&data.list)||[];
+            total=(data&&data.total)||0;
+            if(!list.length){
+                listBox.innerHTML='<div class="picup-mbp-empty">'
+                    + ((qInput && qInput.value.trim()) ? '没有匹配的记录' : '还没有记录，上传一张图片试试')
+                    + '</div>';
+                return;
+            }
+            var html='<div class="picup-mbp-table">';
+            list.forEach(function(row){
+                html+='<div class="picup-mbp-row">'
+                    + '<div class="picup-mbp-row-head">'
+                    +   '<span class="mbp-fname" title="'+esc(row.filename)+'">'+esc(row.filename||'(未命名)')+'</span>'
+                    +   '<span class="mbp-time">'+esc(row.created_at)+'</span>'
+                    + '</div><div class="picup-mbp-links">';
+                var links=row.links||{};
+                var keys=Object.keys(links);
+                keys.forEach(function(profile){
+                    var isPrimary=(profile===row.primary_profile);
+                    html+='<a class="picup-mbp-link'+(isPrimary?' is-primary':'')+'" href="'+esc(links[profile])
+                        + '" target="_blank" rel="noopener noreferrer" title="'+esc(links[profile])+'">'
+                        + '<em>'+esc(profile)+'</em><span>'+esc(links[profile])+'</span>'
+                        + (isPrimary?'<b class="mbp-tag">主</b>':'')
+                        + '</a>';
+                });
+                if(!keys.length){
+                    html+='<a class="picup-mbp-link" href="'+esc(row.primary_url)+'" target="_blank" rel="noopener noreferrer">'
+                        + '<em>'+esc(row.primary_profile)+'</em><span>'+esc(row.primary_url)+'</span></a>';
+                }
+                html+='</div></div>';
+            });
+            html+='</div>';
+
+            var pages=Math.max(1,Math.ceil(total/limit));
+            html+='<div class="picup-mbp-pager">'
+                + '<button type="button" class="picup-mbp-btn picup-mbp-btn-ghost" data-mbp-page="prev"'
+                +   (page<=1?' disabled':'')+'>上一页</button>'
+                + '<span class="picup-mbp-pageinfo">第 '+page+' / '+pages+' 页 · 共 '+total+' 条</span>'
+                + '<button type="button" class="picup-mbp-btn picup-mbp-btn-ghost" data-mbp-page="next"'
+                +   (page>=pages?' disabled':'')+'>下一页</button>'
+                + '</div>';
+            listBox.innerHTML=html;
+
+            [].slice.call(listBox.querySelectorAll('[data-mbp-page]')).forEach(function(btn){
+                btn.addEventListener('click',function(){
+                    if(btn.dataset.mbpPage==='prev' && page>1){ loadList(page-1); }
+                    if(btn.dataset.mbpPage==='next' && page<pages){ loadList(page+1); }
+                });
+            });
+        }
+
+        function loadList(p){
+            if(!listBox) return;
+            if(!ready){
+                listBox.innerHTML='<div class="picup-mbp-empty">开启自动备份后，这里会显示每次上传在各方案里的链接</div>';
+                return;
+            }
+            if(busy) return;
+            busy=true;
+            page=p||1;
+            listBox.innerHTML='<div class="picup-mbp-empty">加载中…</div>';
+            post('links-list',{q:(qInput?qInput.value.trim():''),page:String(page),limit:String(limit)})
+                .then(function(res){
+                    busy=false;
+                    if(res && res.code===0){ renderList(res.data||{}); }
+                    else { listBox.innerHTML='<div class="picup-mbp-empty">读取失败：'+esc((res&&res.message)||'')+'</div>'; }
+                })
+                .catch(function(){
+                    busy=false;
+                    listBox.innerHTML='<div class="picup-mbp-empty">读取失败：网络错误</div>';
+                });
+        }
+
+        function bindViewer(){
+            var btn=document.getElementById('picup-mbp-search');
+            var refresh=document.getElementById('picup-mbp-refresh');
+            if(btn && btn.dataset.bound!=='1'){
+                btn.dataset.bound='1';
+                btn.addEventListener('click',function(){ loadList(1); });
+            }
+            if(refresh && refresh.dataset.bound!=='1'){
+                refresh.dataset.bound='1';
+                refresh.addEventListener('click',function(){ loadList(page); });
+            }
+            if(qInput && qInput.dataset.bound!=='1'){
+                qInput.dataset.bound='1';
+                qInput.addEventListener('keydown',function(e){
+                    if(e.key==='Enter'){ e.preventDefault(); loadList(1); }
+                });
+                qInput.addEventListener('input',function(){
+                    clearTimeout(searchTimer);
+                    searchTimer=setTimeout(function(){ loadList(1); },420);
+                });
+            }
+        }
+
+        bindChecks();
+        bindCreate();
+        bindViewer();
+        syncHidden();
+        setBadge();
+        if(ready){ loadList(1); }
+        else if(listBox){ listBox.innerHTML='<div class="picup-mbp-empty">开启自动备份后，这里会显示每次上传在各方案里的链接</div>'; }
+    }
+
+    if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded',init); }
+    else { init(); }
+    document.addEventListener('ab:pageload',init);
+})();
+
+/* ========================================================================
+ * 11. 迁移与替换面板 (#picup-migrate) —— 备份批量替换
+ * ======================================================================== */
+(function(){
+    function init(){
+        var panel=document.getElementById('picup-migrate');
+        if(!panel || panel.dataset.migInit==='1') return;
+        panel.dataset.migInit='1';
+
+        if(window.picupAddCollapse){ window.picupAddCollapse(panel,'迁移与替换 <span class="picup-beta">Beta</span>','migrate',false); }
+
+        var url=panel.dataset.url||'';
+        var token=panel.dataset.token||'';
+        var fromSel=document.getElementById('picup-mig-from');
+        var toSel=document.getElementById('picup-mig-to');
+        var outBox=document.getElementById('picup-mig-result');
+        var lastEl=document.getElementById('picup-mig-last');
+        var btnPrev=document.getElementById('picup-mig-preview');
+        var btnRun=document.getElementById('picup-mig-run');
+
+        function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+        function show(html){ if(outBox){ outBox.innerHTML=html; } }
+        function post(doName,extra){
+            var fd=new FormData(); fd.append('do',doName); fd.append('_',token);
+            if(extra){ Object.keys(extra).forEach(function(k){ fd.append(k,extra[k]); }); }
+            return fetch(url,{method:'POST',body:fd,credentials:'same-origin'}).then(function(r){return r.json();});
+        }
+        function guard(){
+            var f=fromSel?fromSel.value:'', t=toSel?toSel.value:'';
+            if(!f||!t){ show('<span class="is-warn">请选择源方案与目标方案</span>'); return null; }
+            if(f===t){ show('<span class="is-warn">源方案与目标方案不能相同</span>'); return null; }
+            return {from:f,to:t};
+        }
+
+        /* 默认把「目标方案」落在与源方案不同的那一项，少点一次 */
+        function syncTargetDefault(){
+            if(!fromSel||!toSel) return;
+            if(toSel.value && toSel.value!==fromSel.value) return;
+            var alt=[].slice.call(toSel.options).filter(function(o){ return o.value && o.value!==fromSel.value; });
+            if(alt.length){ toSel.value=alt[0].value; }
+        }
+        if(fromSel){ fromSel.addEventListener('change',syncTargetDefault); }
+        syncTargetDefault();
+
+        if(btnPrev){
+            btnPrev.addEventListener('click',function(){
+                var p=guard(); if(!p) return;
+                btnPrev.disabled=true;
+                show('统计中…');
+                post('migrate-preview',p).then(function(res){
+                    btnPrev.disabled=false;
+                    if(!res||res.code!==0){ show('<span class="is-err">'+esc((res&&res.message)||'统计失败')+'</span>'); return; }
+                    var d=res.data||{};
+                    show('将影响 <b>'+d.records+'</b> 条链接记录 / <b>'+d.attachments+'</b> 个附件 / <b>'+d.posts+'</b> 篇文章'
+                        + '；跳过 <b>'+d.skipped+'</b> 条（目标方案没有对应链接）'
+                        + (d.postScanCapped?'<br><span class="is-warn">文章数仅统计前 200 条记录</span>':''));
+                }).catch(function(){ btnPrev.disabled=false; show('<span class="is-err">统计失败：网络错误</span>'); });
+            });
+        }
+
+        if(btnRun){
+            btnRun.addEventListener('click',function(){
+                var p=guard(); if(!p) return;
+                if(btnRun.dataset.busy==='1') return;
+
+                var go=function(){
+                    btnRun.dataset.busy='1'; btnRun.disabled=true;
+                    show('替换中，请稍候…');
+                    post('migrate-run',p).then(function(res){
+                        btnRun.dataset.busy=''; btnRun.disabled=false;
+                        if(!res||res.code!==0){ show('<span class="is-err">'+esc((res&&res.message)||'替换失败')+'</span>'); return; }
+                        var d=res.data||{};
+                        show('<span class="is-ok">替换完成</span>：链接记录 <b>'+d.records+'</b> 条 / 附件 <b>'+d.attachments
+                            +'</b> 个 / 文章 <b>'+d.posts+'</b> 篇；跳过 '+d.skipped+' 条');
+                        if(lastEl){
+                            var t=new Date();
+                            lastEl.textContent='上次替换：'+t.toLocaleString()+'　'+p.from+' → '+p.to+'　'+d.records+' 条';
+                        }
+                    }).catch(function(){ btnRun.dataset.busy=''; btnRun.disabled=false; show('<span class="is-err">替换失败：网络错误</span>'); });
+                };
+
+                var msg='确定要把「'+p.from+'」的链接整体替换为「'+p.to+'」吗？\n\n'
+                    + '这会改写链接记录、媒体库附件地址，以及文章正文里的旧链接，操作不可撤销（建议先「配置备份」）。';
+                if(window.picupDialog){ window.picupDialog('confirm',msg).then(function(ok){ if(ok) go(); }); }
+                else if(window.confirm(msg)){ go(); }
+            });
+        }
+    }
+
+    if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',init);}
+    else{init();}
+    document.addEventListener('ab:pageload',init);
 })();

@@ -5,7 +5,7 @@
  *
  * @package PicUp
  * @author LHL
- * @version 1.2.10
+ * @version 1.3.0
  * @link https://github.com/lhl77/Typecho-Plugin-PicUp
  */
 
@@ -167,6 +167,7 @@ class Plugin implements PluginInterface
         self::ensureOption('suffixProfiles', '{}');
         self::ensureOption('storagePathTemplate', '{year}/{month}/');
         self::ensureOption('abPromoHidden', '0');
+        self::ensureOption('backupProfiles', '[]');
 
         // 清理旧版本保存的 HtmlElement 占位键（__picup_html_*），
         // 这些键曾因 addInput 误用而被写入配置，key 编号漂移会导致 getInput() 返回 null 崩溃
@@ -272,6 +273,41 @@ class Plugin implements PluginInterface
             }
         } catch (\Throwable $e) {
             error_log('[PicUp] ensureOption(' . $name . '): ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * 直接写入某个插件选项（不会动其他键）。
+     *
+     * 用于「自动备份」复选框即时生效：勾选后不必再点整页「保存设置」。
+     */
+    public static function setPluginOption(string $name, string $value): bool
+    {
+        try {
+            $db    = Db::get();
+            $table = $db->getPrefix() . 'options';
+            $row   = $db->fetchRow(
+                $db->select('value')->from($table)->where('name = ?', 'plugin:PicUp')
+            );
+            if (!$row) {
+                return false;
+            }
+            $settings = self::decodeSettings($row['value']);
+            if ($settings === null) {
+                return false; // 解不出来就别写，避免洗掉用户配置
+            }
+            $settings[$name] = $value;
+
+            $db->query(
+                $db->update($table)
+                    ->rows(['value' => self::encodeSettings($settings)])
+                    ->where('name = ?', 'plugin:PicUp')
+            );
+
+            return true;
+        } catch (\Throwable $e) {
+            error_log('[PicUp] setPluginOption(' . $name . '): ' . $e->getMessage());
+            return false;
         }
     }
 
@@ -404,6 +440,503 @@ class Plugin implements PluginInterface
             }
         } catch (\Exception $e) {
             error_log('[PicUp] 创建备份表失败：' . $e->getMessage());
+        }
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  自动备份：links 表 + 上传时二次分发                              */
+    /* ------------------------------------------------------------------ */
+
+    /**
+     * links 表名（含前缀）。
+     */
+    public static function linksTableName(): string
+    {
+        try {
+            return Db::get()->getPrefix() . 'PicUpLinks';
+        } catch (\Exception $e) {
+            return 'typecho_PicUpLinks';
+        }
+    }
+
+    /**
+     * 创建 {prefix}PicUpLinks 表（不存在时）。返回是否可用。
+     *
+     * 升级上来的站点不会执行 activate()，因此这张表由设置页的「开启自动备份」
+     * 按钮按需创建，而不是在 activate() 里无脑建。
+     */
+    public static function createLinksTable(): bool
+    {
+        try {
+            $db     = Db::get();
+            $table  = self::linksTableName();
+            $dbType = self::getDbType();
+
+            $db->query(self::linksTableDdl($dbType, $table), Db::WRITE);
+
+            return self::linksTableExists();
+        } catch (\Exception $e) {
+            error_log('[PicUp] 创建自动备份表失败：' . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * 生成 {prefix}PicUpLinks 的建表语句（三种数据库各一套 DDL）。
+     *
+     * ⚠️ PgSQL 的表名**不能加引号**：Typecho 的 Query Builder 拼出来的
+     * `INSERT INTO typecho_PicUpLinks ...` 是不带引号的，PostgreSQL 会把未加引号的
+     * 标识符折叠成小写（typecho_picuplinks）。若建表时加引号保住大小写，两边就对不上。
+     */
+    public static function linksTableDdl(string $dbType, string $table): string
+    {
+        switch ($dbType) {
+            case 'sqlite':
+                return "CREATE TABLE IF NOT EXISTS \"{$table}\" ("
+                    . '"id"              INTEGER  PRIMARY KEY AUTOINCREMENT, '
+                    . '"filename"        TEXT     NOT NULL DEFAULT \'\', '
+                    . '"primary_profile" TEXT     NOT NULL DEFAULT \'\', '
+                    . '"primary_url"     TEXT     NOT NULL DEFAULT \'\', '
+                    . '"links"           TEXT     NOT NULL DEFAULT \'{}\', '
+                    . '"cid"             INTEGER  DEFAULT NULL, '
+                    . '"created_at"      TEXT     NOT NULL DEFAULT \'\''
+                    . ');';
+
+            case 'pgsql':
+                return "CREATE TABLE IF NOT EXISTS {$table} ("
+                    . 'id              SERIAL       PRIMARY KEY, '
+                    . 'filename        VARCHAR(255) NOT NULL DEFAULT \'\', '
+                    . 'primary_profile VARCHAR(128) NOT NULL DEFAULT \'\', '
+                    . 'primary_url     TEXT         NOT NULL DEFAULT \'\', '
+                    . 'links           TEXT         NOT NULL DEFAULT \'{}\', '
+                    . 'cid             INTEGER      DEFAULT NULL, '
+                    . 'created_at      TIMESTAMP    NOT NULL DEFAULT NOW()'
+                    . ');';
+
+            default: // mysql / mariadb
+                return "CREATE TABLE IF NOT EXISTS `{$table}` ("
+                    . '`id`              INT          NOT NULL AUTO_INCREMENT, '
+                    . '`filename`        VARCHAR(255) NOT NULL DEFAULT \'\', '
+                    . '`primary_profile` VARCHAR(128) NOT NULL DEFAULT \'\', '
+                    . '`primary_url`     TEXT         NOT NULL, '
+                    . '`links`           MEDIUMTEXT   NOT NULL, '
+                    . '`cid`             INT          NULL DEFAULT NULL, '
+                    . '`created_at`      DATETIME     NOT NULL, '
+                    . 'PRIMARY KEY (`id`), '
+                    . 'KEY `created_at` (`created_at`)'
+                    . ') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;';
+        }
+    }
+
+    /**
+     * 给已存在的旧表补上 `cid` 列（三种数据库各自一条 ALTER）。
+     *
+     * 旧版本建表时没有这一列；补列失败（无权限 / 已存在）都不影响主流程，
+     * 调用方会回退到「URL / 文件名」匹配。
+     */
+    public static function ensureLinksCidColumn(): void
+    {
+        static $done = false;
+        if ($done) {
+            return;
+        }
+        $done = true;
+
+        try {
+            $db    = Db::get();
+            $table = self::linksTableName();
+            if (!self::linksTableExists()) {
+                return;
+            }
+
+            switch (self::getDbType()) {
+                case 'sqlite':
+                    $sql = "ALTER TABLE \"{$table}\" ADD COLUMN \"cid\" INTEGER DEFAULT NULL";
+                    break;
+                case 'pgsql':
+                    $sql = "ALTER TABLE {$table} ADD COLUMN IF NOT EXISTS cid INTEGER DEFAULT NULL";
+                    break;
+                default:
+                    $sql = "ALTER TABLE `{$table}` ADD COLUMN `cid` INT NULL DEFAULT NULL";
+            }
+
+            try {
+                $db->query($sql, Db::WRITE);
+            } catch (\Throwable $e) {
+                // 列已存在 / 无权限 → 忽略
+            }
+        } catch (\Throwable $e) {
+            // ignore
+        }
+    }
+
+    /**
+     * 把本地文件上传到指定方案，返回最终可访问链接；失败返回 null。
+     *
+     * 用于「迁移与替换」：目标方案里还没有这个文件时，先传一份再切链接。
+     */
+    public static function uploadFileToProfile(string $profile, string $localFile, string $mime, string $ext): ?string
+    {
+        if (!is_file($localFile)) {
+            return null;
+        }
+        $driver = self::getDriverForProfile($profile);
+        if (!$driver) {
+            return null;
+        }
+
+        try {
+            $remotePath = self::buildRemotePath($ext !== '' ? $ext : 'bin', $localFile);
+            $uploaded   = $driver->upload($localFile, $remotePath, $mime !== '' ? $mime : 'application/octet-stream');
+            if ($uploaded === false) {
+                return null;
+            }
+
+            return (string)$driver->getStoredPath($remotePath, $uploaded);
+        } catch (\Throwable $e) {
+            error_log('[PicUp] 迁移上传失败（' . $profile . '）：' . $e->getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 把远端文件下载到临时文件（本站 URL 优先直接读磁盘），失败返回 null。
+     */
+    public static function downloadToTemp(string $url): ?string
+    {
+        $tmp = @tempnam(sys_get_temp_dir(), 'picup_mig_');
+        if (!$tmp) {
+            return null;
+        }
+
+        // ① 本站地址 → 直接复制磁盘文件，省一次 HTTP
+        try {
+            $siteUrl = rtrim((string)Options::alloc()->siteUrl, '/');
+        } catch (\Throwable $e) {
+            $siteUrl = '';
+        }
+        if ($siteUrl !== '' && strpos($url, $siteUrl) === 0) {
+            $rel = ltrim(substr($url, strlen($siteUrl)), '/');
+            $abs = rtrim((string)__TYPECHO_ROOT_DIR__, '/') . '/' . $rel;
+            // 去掉可能的查询串
+            $abs = preg_replace('/[?#].*$/', '', $abs);
+            if (is_file($abs) && @copy($abs, $tmp) && filesize($tmp) > 0) {
+                return $tmp;
+            }
+        }
+
+        // ② 远端 → curl
+        if (function_exists('curl_init')) {
+            $fp = @fopen($tmp, 'wb');
+            if ($fp) {
+                $ch = curl_init($url);
+                curl_setopt_array($ch, [
+                    CURLOPT_FILE           => $fp,
+                    CURLOPT_FOLLOWLOCATION => true,
+                    CURLOPT_MAXREDIRS      => 3,
+                    CURLOPT_TIMEOUT        => 30,
+                    CURLOPT_CONNECTTIMEOUT => 10,
+                    CURLOPT_USERAGENT      => 'PicUp-Migrate/1.3',
+                ]);
+                $ok   = curl_exec($ch);
+                $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                curl_close($ch);
+                fclose($fp);
+
+                if ($ok && $code >= 200 && $code < 300 && filesize($tmp) > 0) {
+                    return $tmp;
+                }
+            }
+        }
+
+        @unlink($tmp);
+        return null;
+    }
+
+    /**
+     * 生成「表是否存在」的查询语句。
+     *
+     * MySQL 用 information_schema（不用 SHOW TABLES LIKE —— `_` 在 LIKE 里是通配符，
+     * 会误判成同前缀的其他表），PgSQL 用 lower() 比较以兼容未加引号的小写表名。
+     */
+    public static function linksTableExistsSql(string $dbType, string $table): string
+    {
+        switch ($dbType) {
+            case 'sqlite':
+                return "SELECT name FROM sqlite_master WHERE type='table' AND name='{$table}'";
+
+            case 'pgsql':
+                return "SELECT tablename FROM pg_tables WHERE schemaname='public'"
+                    . " AND lower(tablename)=lower('{$table}')";
+
+            default: // mysql / mariadb
+                return "SELECT table_name FROM information_schema.tables"
+                    . " WHERE table_schema = DATABASE() AND table_name = '{$table}'";
+        }
+    }
+
+    /**
+     * 检测 {prefix}PicUpLinks 表是否存在。
+     */
+    public static function linksTableExists(): bool
+    {
+        try {
+            $db    = Db::get();
+            $table = self::linksTableName();
+            $row   = $db->fetchRow(
+                $db->query(self::linksTableExistsSql(self::getDbType(), $table), Db::READ)
+            );
+
+            return !empty($row);
+        } catch (\Exception $e) {
+            return false;
+        }
+    }
+
+    /**
+     * configJson 里现有的方案名列表。
+     *
+     * @return string[]
+     */
+    public static function getProfileNames(): array
+    {
+        try {
+            $opts = Options::alloc()->plugin('PicUp');
+            $all  = json_decode((string)($opts->configJson ?? '{}'), true);
+        } catch (\Throwable $e) {
+            return [];
+        }
+
+        if (!is_array($all)) {
+            return [];
+        }
+
+        $names = [];
+        foreach ($all as $key => $cfg) {
+            // 只有含 driver 字段的才算方案（configJson 里可能有其它非方案键）
+            if (is_string($key) && is_array($cfg) && !empty($cfg['driver'])) {
+                $names[] = $key;
+            }
+        }
+
+        return $names;
+    }
+
+    /**
+     * 根据链接地址反推它属于哪个方案（只做「前缀 / 域名」匹配，猜不出返回 ''）。
+     *
+     * 用于「没有备份记录」的附件：媒体详情页只有一条当前链接，
+     * 但方案名并没有写在附件里（Typecho 的 attachment.text 只存 path），
+     * 所以只能按各方案配置里的域名 / 上传目录去比对，比 `(当前)` 这种中性标签有用得多。
+     *
+     * 注意多个方案可能互为前缀（`usr/uploads` 是 `usr/uploads-bak` 的前缀），
+     * 因此取**最长**命中。
+     */
+    public static function guessProfileForUrl(string $url): string
+    {
+        $url = trim($url);
+        if ($url === '') {
+            return '';
+        }
+
+        try {
+            $opts    = Options::alloc()->plugin('PicUp');
+            $all     = json_decode((string)($opts->configJson ?? '{}'), true);
+            $siteUrl = rtrim((string)Options::alloc()->siteUrl, '/');
+        } catch (\Throwable $e) {
+            return '';
+        }
+
+        if (!is_array($all)) {
+            return '';
+        }
+
+        $best    = '';
+        $bestLen = 0;
+
+        foreach ($all as $name => $cfg) {
+            if (!is_string($name) || !is_array($cfg) || empty($cfg['driver'])) {
+                continue;
+            }
+
+            $bases = [];
+
+            // 各驱动声明的访问地址 / 域名
+            foreach (['urlPrefix', 'customDomain', 'cdnDomain', 'domain', 'url', 'host', 'siteUrl'] as $k) {
+                $v = isset($cfg[$k]) ? trim((string)$cfg[$k]) : '';
+                if ($v !== '') {
+                    $bases[] = rtrim($v, '/');
+                }
+            }
+
+            $driver = (string)$cfg['driver'];
+            if ($driver === 'local') {
+                $dir = trim((string)($cfg['uploadDir'] ?? ''), '/');
+                if ($dir === '') {
+                    $dir = 'usr/uploads';
+                }
+                if ($siteUrl !== '') {
+                    $bases[] = $siteUrl . '/' . $dir;
+                }
+                // 附件也可能存成相对地址（`/usr/uploads/...`）
+                $bases[] = '/' . $dir;
+            }
+
+            foreach ($bases as $base) {
+                $len = self::urlBaseMatchLength($url, $base);
+                if ($len > $bestLen) {
+                    $bestLen = $len;
+                    $best    = $name;
+                }
+            }
+        }
+
+        return $best;
+    }
+
+    /**
+     * `$url` 命中 `$base` 时返回匹配长度（用于取最长命中），否则返回 0。
+     */
+    private static function urlBaseMatchLength(string $url, string $base): int
+    {
+        if ($base === '') {
+            return 0;
+        }
+
+        if ($base[0] === '/' || strpos($base, '://') !== false) {
+            return strpos($url, $base) === 0 ? strlen($base) : 0;
+        }
+
+        // 只给了域名（没有 scheme）→ 允许出现在 `://` 之后
+        $pos = stripos($url, '://' . $base);
+        return $pos === false ? 0 : strlen($base) + 4;
+    }
+
+    /**
+     * 读取「自动备份」里勾选的备份方案（会过滤掉已不存在的方案）。
+     *
+     * @return string[]
+     */
+    public static function getBackupProfiles(): array
+    {
+        try {
+            $opts = Options::alloc()->plugin('PicUp');
+            $raw  = (string)($opts->backupProfiles ?? '[]');
+        } catch (\Throwable $e) {
+            return [];
+        }
+
+        $list = json_decode($raw, true);
+        if (!is_array($list)) {
+            return [];
+        }
+
+        $existing = self::getProfileNames();
+        $out      = [];
+        foreach ($list as $name) {
+            $name = trim((string)$name);
+            if ($name === '' || in_array($name, $out, true)) {
+                continue;
+            }
+            if (!in_array($name, $existing, true)) {
+                continue; // 方案已被删除
+            }
+            $out[] = $name;
+        }
+
+        return $out;
+    }
+
+    /**
+     * 全局默认方案名（与 getActiveConfig() 的判定保持一致）。
+     */
+    private static function getDefaultProfileName(): string
+    {
+        try {
+            $opts = Options::alloc()->plugin('PicUp');
+            $name = trim((string)($opts->defaultProfile ?? ''));
+        } catch (\Throwable $e) {
+            $name = '';
+        }
+
+        return $name !== '' ? $name : 'default';
+    }
+
+    /**
+     * 主方案上传成功后，把同一份文件再上传到勾选的备份方案，并把所有链接入库。
+     *
+     * @param string $primaryProfile 主方案名
+     * @param string $primaryUrl     主方案最终可访问链接
+     * @param string $localFile      已处理完的本地文件（调用方保证尚未删除）
+     * @param string $mimeType       处理后的 MIME
+     * @param string $remotePath     远端相对路径（备份方案沿用同一路径）
+     * @param string $filename       原始文件名
+     */
+    private static function backupToSelectedProfiles(
+        string $primaryProfile,
+        string $primaryUrl,
+        string $localFile,
+        string $mimeType,
+        string $remotePath,
+        string $filename
+    ): void {
+        $targets = self::getBackupProfiles();
+        if (empty($targets)) {
+            return;
+        }
+
+        if (!self::linksTableExists()) {
+            error_log('[PicUp] 自动备份：' . self::linksTableName()
+                . ' 表不存在，已跳过（请在插件设置 → 自动备份 里点击「开启自动备份」）');
+            return;
+        }
+
+        // 主方案也记进 links，方便查看器里「一个文件看到全部链接」
+        $links = [$primaryProfile => $primaryUrl];
+
+        foreach ($targets as $profile) {
+            // 与主方案相同 → 跳过，避免同一方案重复上传
+            if ($profile === $primaryProfile || isset($links[$profile])) {
+                continue;
+            }
+
+            $driver = self::getDriverForProfile($profile);
+            if (!$driver) {
+                error_log('[PicUp] 自动备份：方案 "' . $profile . '" 无法初始化驱动，已跳过');
+                continue;
+            }
+
+            try {
+                $url = $driver->upload($localFile, $remotePath, $mimeType);
+                if ($url === false) {
+                    $driverClass = get_class($driver);
+                    $detail      = property_exists($driverClass, 'lastError')
+                        ? (string)$driverClass::$lastError
+                        : '';
+                    error_log('[PicUp] 自动备份：上传到方案 "' . $profile . '" 失败'
+                        . ($detail !== '' ? '：' . $detail : ''));
+                    continue;
+                }
+                $links[$profile] = $driver->getStoredPath($remotePath, $url);
+            } catch (\Throwable $e) {
+                error_log('[PicUp] 自动备份：方案 "' . $profile . '" 异常：' . $e->getMessage());
+            }
+        }
+
+        try {
+            $db = Db::get();
+            $db->query(
+                $db->insert('table.PicUpLinks')->rows([
+                    'filename'        => mb_substr($filename, 0, 250),
+                    'primary_profile' => $primaryProfile,
+                    'primary_url'     => $primaryUrl,
+                    'links'           => json_encode($links, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+                    'created_at'      => date('Y-m-d H:i:s'),
+                ]),
+                Db::WRITE
+            );
+        } catch (\Throwable $e) {
+            error_log('[PicUp] 自动备份：写入链接记录失败：' . $e->getMessage());
         }
     }
 
@@ -733,6 +1266,28 @@ display:none;max-width:300px;line-height:1.4;pointer-events:none;transition:opac
 })();
 </script>
 END_SCRIPT;
+
+        /* ── 媒体库增强（角标 / 详情页链接与迁移）+ 迁移接口地址 ── */
+        try {
+            $siteUrl   = rtrim((string)Options::alloc()->siteUrl, '/');
+            $ajaxUrl   = \Typecho\Common::url('/action/picup-backup', \Widget\Options::alloc()->index);
+            $security  = \Typecho\Widget::widget('Widget\\Security');
+            $token     = $security ? $security->getToken($ajaxUrl) : '';
+            $assetBase = $siteUrl . '/usr/plugins/PicUp/assets';
+            $cssVer    = @filemtime(__DIR__ . '/assets/css/picup-admin.css') ?: time();
+            $jsVer     = @filemtime(__DIR__ . '/assets/js/picup-admin.js') ?: time();
+
+            $header .= '<script>window.__PICUP_MIG__=' . json_encode([
+                'url'     => $ajaxUrl,
+                'token'   => (string)$token,
+                'siteUrl' => $siteUrl,
+            ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';</script>'
+                . "\n" . '<link rel="stylesheet" href="' . $assetBase . '/css/picup-admin.css?v=' . $cssVer . '">'
+                . "\n" . '<script src="' . $assetBase . '/js/picup-admin.js?v=' . $jsVer . '"></script>' . "\n";
+        } catch (\Throwable $e) {
+            // 忽略：非后台环境或缺少 Security 组件
+        }
+
         return $header;
     }
 
@@ -752,7 +1307,7 @@ END_SCRIPT;
         }
 
         // 0. 顶部插件信息 & AdminBeautify 推荐
-        $pluginVersion = '1.2.10';
+        $pluginVersion = '1.3.0';
         try {
             $siteUrl = rtrim(Options::alloc()->siteUrl, '/');
         } catch (\Throwable $e) {
@@ -894,7 +1449,7 @@ END_SCRIPT;
   <div class="picup-info-card picup-ab-card">
     <h4 class="picup-info-title">✨ 推荐安装 AB Admin</h4>
     <div class="picup-info-meta">
-      最美后台美化插件，基于 Material Design 3，让后台更美观更好用。
+      最美后台美化，最强大的 Typecho AI 助手，完整的管理功能。
     </div>
     <p style="margin:0!important;display:flex!important;align-items:center!important;gap:8px!important;flex-wrap:wrap!important;">
       <button type="button" id="picup-ab-promo-open" class="picup-ab-open-btn">查看详情</button>
@@ -1021,6 +1576,33 @@ HTML));
         // 方案规则：后缀方案 GUI 编辑器
         $form->addItem(new HtmlElement(self::buildSuffixProfilesGuiHtml()));
 
+        // 自动备份：勾选的备份方案（JSON 数组，由下方面板的复选框维护）
+        $existingBackupProfiles = '[]';
+        try {
+            $existingBackupOpts = Options::alloc()->plugin('PicUp');
+            $existingBackupProfiles = (string)($existingBackupOpts->backupProfiles ?? '[]') ?: '[]';
+        } catch (\Throwable $e) {
+            // ignore
+        }
+        $backupProfilesField = new Textarea(
+            'backupProfiles',
+            null,
+            $existingBackupProfiles,
+            _t('自动备份方案列表（JSON）'),
+            _t('主方案上传后再传到这些方案做备份。<br/>格式：<code>["bak", "upyun"]</code>（方案名数组）。'
+                . '<br/>上述「自动备份」面板里的复选框会实时同步到这里；主方案会被自动跳过，不会重复上传同一方案。')
+        );
+        $backupProfilesField->input->setAttribute(
+            'style',
+            'width:100%;max-width:800px;height:52px;font-family:monospace;font-size:13px;display:block;margin:0 auto;'
+        );
+
+        // 自动备份面板（折叠头 + 复选框 + 建表按钮 + 链接查看器）
+        $form->addItem(new HtmlElement(self::buildMultiProfileBackupHtml()));
+
+        // 迁移与替换面板（批量替换 + 单文件迁移指引）
+        $form->addItem(new HtmlElement(self::buildMigrateHtml()));
+
 
         // 3. JSON 原始配置
         $configJson = new Textarea(
@@ -1037,6 +1619,9 @@ HTML));
             'width:100%;max-width:800px;height:300px;font-family:monospace;font-size:13px;display:block;margin:0 auto;'
         );
         $form->addInput($configJson);
+
+        // 自动备份的原始 JSON（和 configJson 一起放进「JSON 配置」折叠区）
+        $form->addInput($backupProfilesField);
 
         // 备份管理区域
         $form->addItem(new HtmlElement(self::buildBackupHtml()));
@@ -1083,11 +1668,20 @@ HTML));
          */
         private static function buildSummaryCardHtml(): string
         {
+            // 插件 Logo（直接用外链图片，不占插件体积）
+            $logoUrl = 'https://i.see.you/2026/07/26/5dnU/6cf4c80b939c47baefb00b66bd567b8a.jpg';
+
             return <<<HTML
 <ul class="typecho-option" id="typecho-option-item-picup-summary"><li>
 <div id="picup-summary-card" class="picup-summary-card">
   <div class="psc-head">
-    <span class="psc-title">设置摘要</span>
+    <div class="psc-brand">
+      <img class="psc-logo" src="{$logoUrl}" alt="PicUp" referrerpolicy="no-referrer">
+      <div class="psc-brand-txt">
+        <span class="psc-title">设置摘要</span>
+        <span class="psc-subtitle">多存储后端图片 / 附件上传</span>
+      </div>
+    </div>
     <span class="psc-badge" id="psc-badge">—</span>
   </div>
   <div class="psc-grid" id="psc-grid">
@@ -1116,10 +1710,12 @@ HTML;
         <button type="button" id="picup-ab-promo-close" class="picup-ab-promo-close">不再显示</button>
     </div>
     <p class="picup-ab-promo-tip">
-        AB Admin是一个一款为 Typecho 打造的后台美化增强插件，基于 Material Design 3 风格设计，让后台更美观、更好用。内含更好用的编辑器（适配PicUp）以及更多功能，欢迎下载使用。<br/>
-        图文介绍: <a href="https://see.lhl.one/Typecho-AB-Admin" target="_blank">https://see.lhl.one/Typecho-AB-Admin</a><br/>
-        Github: <a href="https://github.com/lhl77/Typecho-Plugin-AdminBeautify" target="_blank">lhl77/Typecho-Plugin-AdminBeautify</a> 
+        AB Admin 是一款为 Typecho 打造的后台美化增强插件：Material Design 3 风格美化、内置最强大的 Typecho AI 助手、完整的管理功能，并深度适配 PicUp（编辑器里可直接插入已上传的图片）。欢迎下载使用。
     </p>
+    <div class="picup-ab-promo-links">
+        <a class="picup-ab-promo-btn is-primary" href="https://ab.lhl.one" target="_blank" rel="noopener noreferrer">AB Admin 官网</a>
+        <a class="picup-ab-promo-btn" href="https://github.com/lhl77/Typecho-Plugin-AdminBeautify" target="_blank" rel="noopener noreferrer">GitHub</a>
+    </div>
 
     <div class="picup-ab-promo-grid">
         <div class="picup-ab-promo-item">
@@ -1151,6 +1747,22 @@ HTML;
             <p>更清晰的文件卡片与操作入口，日常维护与归档管理更高效。</p>
             <button type="button" class="picup-ab-promo-shot" data-full-src="https://i.see.you/2026/07/15/c6kF/2ab6f637f6029d05199377aaa5d432b4.jpg" aria-label="全屏预览图片 4">
                 <img alt="直观的文件管理界面" src="https://i.see.you/2026/07/15/c6kF/2ab6f637f6029d05199377aaa5d432b4.jpg">
+            </button>
+        </div>
+
+        <div class="picup-ab-promo-item">
+            <h5>5. AI 打通全后台管理链路</h5>
+            <p>内置 AI 助手可直接读写后台设置、文章、评论与插件配置，一句话完成整套后台管理操作。</p>
+            <button type="button" class="picup-ab-promo-shot" data-full-src="https://i.see.you/2026/11/17/6Kol/5b938eed7287f1a32224f0d03967cfd9.jpg" aria-label="全屏预览图片 5">
+                <img alt="AI 打通全后台管理链路" src="https://i.see.you/2026/11/17/6Kol/5b938eed7287f1a32224f0d03967cfd9.jpg">
+            </button>
+        </div>
+
+        <div class="picup-ab-promo-item">
+            <h5>6. 用 AI 来控制 PicUp</h5>
+            <p>直接在后台对 AI 说“把上传方案换成 WebDAV、开启水印、压缩到 80%”，它会替你改好 PicUp 的全部设置。</p>
+            <button type="button" class="picup-ab-promo-shot" data-full-src="https://i.see.you/2026/11/17/o0hX/83da4b98c723d3122690356fe28643e0.jpg" aria-label="全屏预览图片 6">
+                <img alt="用 AI 来控制 PicUp" src="https://i.see.you/2026/11/17/o0hX/83da4b98c723d3122690356fe28643e0.jpg">
             </button>
         </div>
     </div>
@@ -1532,17 +2144,34 @@ HTML;
 
         $remotePath = self::buildRemotePath($ext, $processedFile);
 
+        // 自动备份：本地驱动用 move_uploaded_file 会「吃掉」临时文件，
+        // 所以先给备份留一份副本（没开启自动备份时不做这个拷贝）。
+        $backupSource = null;
+        try {
+            if (!empty(self::getBackupProfiles()) && self::linksTableExists()) {
+                $tmpBak = @tempnam(sys_get_temp_dir(), 'picup_bak_');
+                if ($tmpBak && @copy($processedFile, $tmpBak)) {
+                    $backupSource = $tmpBak;
+                }
+            }
+        } catch (\Throwable $e) {
+            $backupSource = null;
+        }
+
         $uploadedUrl = $driver->upload($processedFile, $remotePath, $processedMime);
 
-        // 清理临时文件
-        if ($tmpCreated) {
-            @unlink($localFile);
-        }
-        foreach ($extTmpFiles as $tf) {
-            @unlink($tf);
-        }
-
         if ($uploadedUrl === false) {
+            if ($backupSource) {
+                @unlink($backupSource);
+            }
+            // 清理临时文件
+            if ($tmpCreated) {
+                @unlink($localFile);
+            }
+            foreach ($extTmpFiles as $tf) {
+                @unlink($tf);
+            }
+
             $driverClass = get_class($driver);
             // 尝试从 WebDavDriver 读取详细错误信息（HTTP 状态码 + 响应片段）
             $detail = '';
@@ -1556,9 +2185,38 @@ HTML;
             throw new \RuntimeException($msg);
         }
 
+        $storedPath = $driver->getStoredPath($remotePath, $uploadedUrl);
+
+        // 自动备份：复用同一份内容，向勾选的备份方案再传一次。
+        // 任何异常都不应影响主上传结果。
+        if ($backupSource) {
+            try {
+                $primaryProfile = $effectiveProfile !== '' ? $effectiveProfile : self::getDefaultProfileName();
+                self::backupToSelectedProfiles(
+                    $primaryProfile,
+                    $storedPath,
+                    $backupSource,
+                    $processedMime,
+                    $remotePath,
+                    $file['name']
+                );
+            } catch (\Throwable $e) {
+                error_log('[PicUp] 自动备份异常：' . $e->getMessage());
+            }
+            @unlink($backupSource);
+        }
+
+        // 清理临时文件
+        if ($tmpCreated) {
+            @unlink($localFile);
+        }
+        foreach ($extTmpFiles as $tf) {
+            @unlink($tf);
+        }
+
         return [
             'name' => $file['name'],
-            'path' => $driver->getStoredPath($remotePath, $uploadedUrl),
+            'path' => $storedPath,
             'size' => $file['size'] ?? 0,
             'type' => $ext,
             'mime' => $processedMime,
@@ -2194,6 +2852,181 @@ HTML;
   <div class="pb-empty">加载中…</div>
 </div>
 <p class="pb-status" id="pb-status"></p>
+</div>
+</li></ul>
+HTML;
+    }
+
+    /**
+     * 构建「自动备份」面板：折叠头（由 JS 包裹）+ 方案复选框 + 建表按钮 + 链接查看器。
+     */
+    private static function buildMultiProfileBackupHtml(): string
+    {
+        try {
+            $options  = \Widget\Options::alloc();
+            $security = \Typecho\Widget::widget('Widget\\Security');
+            $ajaxUrl  = \Typecho\Common::url('/action/picup-backup', $options->index);
+            $token    = $security->getToken($ajaxUrl);
+        } catch (\Throwable $e) {
+            return '';
+        }
+
+        $prefix   = 'typecho_';
+        try {
+            $prefix = (string)Db::get()->getPrefix();
+        } catch (\Throwable $e) {
+            // ignore
+        }
+
+        $table    = $prefix . 'PicUpLinks';
+        $ready    = self::linksTableExists();
+        $readyInt = $ready ? 1 : 0;
+        $selected = self::getBackupProfiles();
+
+        // 方案清单 + 驱动标识（显示在复选框副标题里）
+        $profiles = [];
+        try {
+            $opts = Options::alloc()->plugin('PicUp');
+            $all  = json_decode((string)($opts->configJson ?? '{}'), true);
+        } catch (\Throwable $e) {
+            $all = null;
+        }
+        if (is_array($all)) {
+            foreach ($all as $key => $cfg) {
+                if (is_string($key) && is_array($cfg) && !empty($cfg['driver'])) {
+                    $profiles[$key] = (string)($cfg['driver'] ?? '');
+                }
+            }
+        }
+
+        // 已记录条数
+        $count = 0;
+        if ($ready) {
+            try {
+                $db  = Db::get();
+                $row = $db->fetchRow($db->select('COUNT(id) AS c')->from('table.PicUpLinks'));
+                $count = (int)($row['c'] ?? 0);
+            } catch (\Throwable $e) {
+                $count = 0;
+            }
+        }
+
+        $chips = '';
+        foreach ($profiles as $name => $driver) {
+            $checked = in_array($name, $selected, true) ? ' checked' : '';
+            $chips .= '<label class="picup-mbp-chip">'
+                . '<input type="checkbox" class="picup-mbp-cb" value="' . htmlspecialchars($name, ENT_QUOTES) . '"' . $checked . '>'
+                . '<span class="picup-mbp-chip-name">' . htmlspecialchars($name) . '</span>'
+                . ($driver !== '' ? '<em class="picup-mbp-chip-drv">' . htmlspecialchars($driver) . '</em>' : '')
+                . '</label>';
+        }
+        if ($chips === '') {
+            $chips = '<p class="picup-mbp-empty">还没有任何方案 —— 请先在上方「配置编辑器」里添加并保存方案。</p>';
+        }
+
+        $tableEsc = htmlspecialchars($table);
+        if ($ready) {
+            $statusHtml = '<span class="picup-mbp-ok">已开启</span>'
+                . '<span class="picup-mbp-count">已记录 <b>' . $count . '</b> 条上传链接</span>';
+        } else {
+            $statusHtml = '<span class="picup-mbp-warn">尚未开启</span>'
+                . '<span class="picup-mbp-need">需要数据库表 <code>' . $tableEsc . '</code>，点击右侧按钮一键创建（不影响已有数据）。</span>'
+                . '<button type="button" class="picup-mbp-create" id="picup-mbp-create">开启自动备份</button>';
+        }
+
+        $ajaxUrlEsc = htmlspecialchars($ajaxUrl, ENT_QUOTES);
+        $tokenEsc   = htmlspecialchars($token, ENT_QUOTES);
+
+        return <<<HTML
+<ul class="typecho-option" id="typecho-option-item-picup-mbp"><li>
+<div id="picup-mbp" class="picup-mbp" data-url="{$ajaxUrlEsc}" data-token="{$tokenEsc}" data-ready="{$readyInt}" data-table="{$tableEsc}">
+  <p class="picup-mbp-lead">勾选后，每次上传都会把同一份文件再上传到这些方案作为备份；主方案会被自动跳过，不会重复上传同一方案。</p>
+  <div class="picup-mbp-status" id="picup-mbp-status">{$statusHtml}</div>
+  <div class="picup-mbp-profiles" id="picup-mbp-profiles">{$chips}</div>
+  <div class="picup-mbp-viewer">
+    <div class="picup-mbp-toolbar">
+      <input type="search" id="picup-mbp-q" class="picup-mbp-q" placeholder="搜索文件名 / 方案名 / 链接…">
+      <button type="button" class="picup-mbp-btn" id="picup-mbp-search">搜索</button>
+      <button type="button" class="picup-mbp-btn picup-mbp-btn-ghost" id="picup-mbp-refresh">刷新</button>
+    </div>
+    <div class="picup-mbp-list" id="picup-mbp-list"><div class="picup-mbp-empty">加载中…</div></div>
+  </div>
+</div>
+</li></ul>
+HTML;
+    }
+
+    /**
+     * 构建「迁移与替换」面板：备份批量替换 + 单文件迁移的文字指引。
+     */
+    private static function buildMigrateHtml(): string
+    {
+        try {
+            $options  = \Widget\Options::alloc();
+            $security = \Typecho\Widget::widget('Widget\\Security');
+            $ajaxUrl  = \Typecho\Common::url('/action/picup-backup', $options->index);
+            $token    = $security->getToken($ajaxUrl);
+            $adminUrl = rtrim((string)$options->adminUrl, '/');
+        } catch (\Throwable $e) {
+            return '';
+        }
+
+        $profiles = self::getProfileNames();
+        $optsHtml = '';
+        foreach ($profiles as $name) {
+            $optsHtml .= '<option value="' . htmlspecialchars($name, ENT_QUOTES) . '">'
+                . htmlspecialchars($name) . '</option>';
+        }
+        if ($optsHtml === '') {
+            $optsHtml = '<option value="">（还没有配置方案）</option>';
+        }
+
+        $lastHtml = '';
+        try {
+            $lastRaw = (string)(Options::alloc()->plugin('PicUp')->lastMigrate ?? '');
+            $last    = json_decode($lastRaw, true);
+            if (is_array($last) && !empty($last['at'])) {
+                $lastHtml = '上次替换：' . htmlspecialchars((string)$last['at'])
+                    . '　' . htmlspecialchars((string)($last['from'] ?? '')) . ' → '
+                    . htmlspecialchars((string)($last['to'] ?? ''))
+                    . '　' . (int)($last['records'] ?? 0) . ' 条';
+            }
+        } catch (\Throwable $e) {
+            $lastHtml = '';
+        }
+
+        $ajaxUrlEsc = htmlspecialchars($ajaxUrl, ENT_QUOTES);
+        $tokenEsc   = htmlspecialchars($token, ENT_QUOTES);
+        $adminEsc   = htmlspecialchars($adminUrl);
+
+        return <<<HTML
+<ul class="typecho-option" id="typecho-option-item-picup-migrate"><li>
+<div id="picup-migrate" class="picup-mig" data-url="{$ajaxUrlEsc}" data-token="{$tokenEsc}">
+  <p class="picup-mig-lead">
+    <b>备份批量替换</b>：把已经备份过的文件从「源方案」整体切到「目标方案」——
+    会同时改写 <b>链接记录</b>、<b>媒体库附件地址</b> 与 <b>文章正文里的引用</b>。
+    目标方案里必须有同名文件的链接（由「自动备份」上传产生），否则该条会被跳过。
+  </p>
+
+  <div class="picup-mig-row">
+    <label class="picup-mig-field"><span>源方案</span>
+      <select id="picup-mig-from" class="picup-mig-sel">{$optsHtml}</select>
+    </label>
+    <span class="picup-mig-arrow" aria-hidden="true">→</span>
+    <label class="picup-mig-field"><span>目标方案</span>
+      <select id="picup-mig-to" class="picup-mig-sel">{$optsHtml}</select>
+    </label>
+    <button type="button" class="picup-mig-btn" id="picup-mig-preview">预览影响</button>
+    <button type="button" class="picup-mig-btn is-primary" id="picup-mig-run">执行替换</button>
+  </div>
+
+  <div class="picup-mig-result" id="picup-mig-result"></div>
+  <p class="picup-mig-last" id="picup-mig-last">{$lastHtml}</p>
+
+  <div class="picup-mig-note">
+    <b>方案迁移（单文件）</b>：请到「管理 → 文件」点开某个文件，在文件详情页操作。
+    在详情页可以看到该文件在各方案下的全部链接，也能直接迁移到其它方案。
+  </div>
 </div>
 </li></ul>
 HTML;
