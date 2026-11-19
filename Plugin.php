@@ -5,7 +5,7 @@
  *
  * @package PicUp
  * @author LHL
- * @version 1.3.1
+ * @version 1.3.2
  * @link https://github.com/lhl77/Typecho-Plugin-PicUp
  */
 
@@ -670,7 +670,7 @@ class Plugin implements PluginInterface
                     CURLOPT_MAXREDIRS      => 3,
                     CURLOPT_TIMEOUT        => 30,
                     CURLOPT_CONNECTTIMEOUT => 10,
-                    CURLOPT_USERAGENT      => 'PicUp-Migrate/1.3.1',
+                    CURLOPT_USERAGENT      => 'PicUp-Migrate/1.3.2',
                 ]);
                 $ok   = curl_exec($ch);
                 $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -915,6 +915,9 @@ class Plugin implements PluginInterface
     /**
      * 主方案上传成功后，把同一份文件再上传到勾选的备份方案，并把所有链接入库。
      *
+     * ⚠️ 这个方法是**同步执行**的，只在需要立刻拿到结果的地方直接调用；
+     * 正常上传走 queueBackup() → flushBackupQueue()，在响应发出后才跑。
+     *
      * @param string $primaryProfile 主方案名
      * @param string $primaryUrl     主方案最终可访问链接
      * @param string $localFile      已处理完的本地文件（调用方保证尚未删除）
@@ -987,6 +990,83 @@ class Plugin implements PluginInterface
             );
         } catch (\Throwable $e) {
             error_log('[PicUp] 自动备份：写入链接记录失败：' . $e->getMessage());
+        }
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  自动备份队列：响应发出去之后再传，用户不用等                       */
+    /* ------------------------------------------------------------------ */
+
+    /** @var array<int,array<string,string>> 本次请求待执行的备份任务 */
+    private static array $backupQueue = [];
+
+    /** 是否已注册 shutdown 回调 */
+    private static bool $backupFlushRegistered = false;
+
+    /**
+     * 把一次「备份到其它方案」的任务排进队列。
+     *
+     * @param array<string,string> $job primaryProfile / primaryUrl / localFile / mimeType / remotePath / filename
+     */
+    private static function queueBackup(array $job): void
+    {
+        self::$backupQueue[] = $job;
+
+        if (self::$backupFlushRegistered) {
+            return;
+        }
+        self::$backupFlushRegistered = true;
+        register_shutdown_function([self::class, 'flushBackupQueue']);
+    }
+
+    /**
+     * 请求收尾时执行队列里的备份任务（供 register_shutdown_function 调用）。
+     *
+     * 关键点：**先把响应吐给客户端，再干活**，否则用户还是要等备份传完。
+     *  - php-fpm：`fastcgi_finish_request()` 立刻断开与浏览器的连接；
+     *  - LiteSpeed：`litespeed_finish_request()`；
+     *  - 其它 SAPI（mod_php / 内置服务器）：只能 ignore_user_abort + flush，
+     *    响应仍要等脚本结束才真正送达 —— 但至少不会因为备份失败影响主上传。
+     */
+    public static function flushBackupQueue(): void
+    {
+        if (empty(self::$backupQueue)) {
+            return;
+        }
+
+        if (function_exists('fastcgi_finish_request')) {
+            @fastcgi_finish_request();
+        } elseif (function_exists('litespeed_finish_request')) {
+            @litespeed_finish_request();
+        } else {
+            @ignore_user_abort(true);
+            while (ob_get_level() > 0) {
+                @ob_end_flush();
+            }
+            @flush();
+        }
+        // 备份上传可能要几十秒，别被 max_execution_time 掐断
+        @set_time_limit(0);
+
+        $jobs = self::$backupQueue;
+        self::$backupQueue = [];
+
+        foreach ($jobs as $job) {
+            try {
+                self::backupToSelectedProfiles(
+                    (string)($job['primaryProfile'] ?? ''),
+                    (string)($job['primaryUrl'] ?? ''),
+                    (string)($job['localFile'] ?? ''),
+                    (string)($job['mimeType'] ?? ''),
+                    (string)($job['remotePath'] ?? ''),
+                    (string)($job['filename'] ?? '')
+                );
+            } catch (\Throwable $e) {
+                error_log('[PicUp] 自动备份异常：' . $e->getMessage());
+            }
+            if (!empty($job['localFile']) && is_file($job['localFile'])) {
+                @unlink($job['localFile']);
+            }
         }
     }
 
@@ -1348,7 +1428,7 @@ END_SCRIPT;
     /**
      * 静态资源的缓存版本号。
      *
-     * 用 `mtime-size` 而不是插件版本号：版本号改动不频繁（现在 1.3.1），改了文件但没发版时
+     * 用 `mtime-size` 而不是插件版本号：版本号改动不频繁（现在 1.3.2），改了文件但没发版时
      * 浏览器 / CDN 会一直吐旧文件（`picup-config.css` 曾经就没带任何版本号）。
      * 每次部署文件被覆盖 → mtime 变化 → URL 变化，一定能取到新内容。
      */
@@ -1374,7 +1454,7 @@ END_SCRIPT;
         }
 
         // 0. 顶部插件信息 & AdminBeautify 推荐
-        $pluginVersion = '1.3.1';
+        $pluginVersion = '1.3.2';
         try {
             $siteUrl = rtrim(Options::alloc()->siteUrl, '/');
         } catch (\Throwable $e) {
@@ -2326,22 +2406,25 @@ HTML;
         $storedPath = $driver->getStoredPath($remotePath, $uploadedUrl);
 
         // 自动备份：复用同一份内容，向勾选的备份方案再传一次。
-        // 任何异常都不应影响主上传结果。
+        //
+        // ⚠️ 这里**不直接传**，而是排进队列、等本次请求的响应发出去之后再跑：
+        // 方案一多（每个都要 curl 一次），用户就得干等好几秒甚至几十秒才看到「上传成功」。
+        // 队列由 flushBackupQueue() 在 shutdown 阶段处理（优先 fastcgi_finish_request）。
         if ($backupSource) {
             try {
                 $primaryProfile = $effectiveProfile !== '' ? $effectiveProfile : self::getDefaultProfileName();
-                self::backupToSelectedProfiles(
-                    $primaryProfile,
-                    $storedPath,
-                    $backupSource,
-                    $processedMime,
-                    $remotePath,
-                    $file['name']
-                );
+                self::queueBackup([
+                    'primaryProfile' => $primaryProfile,
+                    'primaryUrl'     => $storedPath,
+                    'localFile'      => $backupSource,
+                    'mimeType'       => $processedMime,
+                    'remotePath'     => $remotePath,
+                    'filename'       => $file['name'],
+                ]);
             } catch (\Throwable $e) {
-                error_log('[PicUp] 自动备份异常：' . $e->getMessage());
+                error_log('[PicUp] 自动备份入队失败：' . $e->getMessage());
+                @unlink($backupSource);
             }
-            @unlink($backupSource);
         }
 
         // 清理临时文件
