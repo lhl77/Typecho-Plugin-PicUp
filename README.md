@@ -56,7 +56,7 @@
 | **WebDAV** | `webdav` | 标准 WebDAV 协议 |
 | **X BackBone** | `xbackbone` | X BackBone 自建图床（PHP），Bearer Token 认证 |
 | **Zipline** | `zipline` | Zipline 自建图床，API Token 认证 |
-| **Zpic 图床** | `zpic` | Zpic / ImgURL Pro，支持 V2/V3 API |
+| **Zpic / ImgURL Pro** | `zpic` | [zpic.pro](https://www.zpic.pro/)（ImgURL Pro 系），支持 V2/V3 API |
 | **阿里云 OSS** | `aliyunoss` | 阿里云对象存储（原生 V1 签名） |
 | **本地存储** | `local` | 遵循 Typecho 原生逻辑，存储至 `usr/uploads/` |
 | **初春图床 (OneImg)** | `oneimg` | 初春图床，Bearer Token 认证 |
@@ -283,11 +283,11 @@
 </details>
 
 <details>
-<summary><b>Zpic 图床</b></summary>
+<summary><b>Zpic / ImgURL Pro</b></summary>
 
 | 字段 | 说明 |
 |------|------|
-| `server` | 图床域名，如 `https://zpic.example.com` |
+| `server` | 图床域名，官方实例为 `https://www.zpic.pro`；自建填自己的域名 |
 | `api_version` | API 版本：`v3`（Bearer Token，推荐）或 `v2`（uid + token，兼容 ImgURL Pro） |
 | `token` | V3 的 Token（格式 `sk-xxx`）或 V2 的 Token |
 | `uid` | UID（仅 V2 需要） |

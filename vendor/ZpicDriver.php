@@ -1,7 +1,7 @@
 <?php
 
 /**
- * PicUp for Typecho - Zpic 图床驱动
+ * PicUp for Typecho - Zpic / ImgURL Pro 图床驱动
  *
  * 使用 Zpic V3 API（兼容 ImgURL Pro V2 API）
  * V3 文档：POST /api/v3/upload，Authorization: Bearer <token>
@@ -26,7 +26,7 @@ class ZpicDriver implements DriverInterface
 
     public static function getName(): string
     {
-        return 'Zpic 图床';
+        return 'Zpic / ImgURL Pro';
     }
 
     public static function getConfigFields(): array
@@ -35,8 +35,8 @@ class ZpicDriver implements DriverInterface
             'server' => [
                 'label'       => '图床域名',
                 'type'        => 'text',
-                'default'     => '',
-                'description' => '图床的基础域名，如 https://zpic.example.com（末尾不加 /）',
+                'default'     => 'https://www.zpic.pro',
+                'description' => '官方实例为 https://www.zpic.pro；自建站点填自己的域名（末尾不加 /）',
                 'required'    => true,
             ],
             'api_version' => [
