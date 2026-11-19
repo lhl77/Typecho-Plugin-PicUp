@@ -13,9 +13,9 @@
 [![Stars](https://img.shields.io/github/stars/lhl77/Typecho-Plugin-PicUp?style=flat&logo=github)](https://github.com/lhl77/Typecho-Plugin-PicUp/stargazers)
 
 <br>
-
-[![官网](https://img.shields.io/badge/%E5%AE%98%E7%BD%91-picup.lhl.one-0a5bd3?logoColor=white)](https://picup.lhl.one)
-[![使用与开发文档](https://img.shields.io/badge/%E4%BD%BF%E7%94%A8%E4%B8%8E%E5%BC%80%E5%8F%91%E6%96%87%E6%A1%A3-blog.lhl.one-55624c?logoColor=white)](https://blog.lhl.one/artical/1026.html)
+相关链接：
+[官网](https://picup.lhl.one) | 
+[使用与开发文档](https://blog.lhl.one/artical/1026.html)
 
 </div>
 
