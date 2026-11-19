@@ -13,11 +13,13 @@
 [![Stars](https://img.shields.io/github/stars/lhl77/Typecho-Plugin-PicUp?style=flat&logo=github)](https://github.com/lhl77/Typecho-Plugin-PicUp/stargazers)
 
 <br>
+
+</div>
+
+
 相关链接：
 [官网](https://picup.lhl.one) | 
 [使用与开发文档](https://blog.lhl.one/artical/1026.html)
-
-</div>
 
 ---
 
