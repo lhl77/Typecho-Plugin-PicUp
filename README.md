@@ -56,7 +56,7 @@
 | **WebDAV** | `webdav` | 标准 WebDAV 协议 |
 | **X BackBone** | `xbackbone` | X BackBone 自建图床（PHP），Bearer Token 认证 |
 | **Zipline** | `zipline` | Zipline 自建图床，API Token 认证 |
-| **Zpic 图床** | `zpic` | Zpic / ImgURL Pro，支持 V2/V3 API |
+| **zPic 图床** | `zpic` | zPic.org（Chevereto），API Key 上传 |
 | **阿里云 OSS** | `aliyunoss` | 阿里云对象存储（原生 V1 签名） |
 | **本地存储** | `local` | 遵循 Typecho 原生逻辑，存储至 `usr/uploads/` |
 | **初春图床 (OneImg)** | `oneimg` | 初春图床，Bearer Token 认证 |
@@ -283,15 +283,20 @@
 </details>
 
 <details>
-<summary><b>Zpic 图床</b></summary>
+<summary><b>zPic 图床</b></summary>
+
+zPic（<https://zpic.org>）与自建站点均基于 Chevereto，走其 API v1：`POST /api/1/upload`。
 
 | 字段 | 说明 |
 |------|------|
-| `server` | 图床域名，如 `https://zpic.example.com` |
-| `api_version` | API 版本：`v3`（Bearer Token，推荐）或 `v2`（uid + token，兼容 ImgURL Pro） |
-| `token` | V3 的 Token（格式 `sk-xxx`）或 V2 的 Token |
-| `uid` | UID（仅 V2 需要） |
-| `album_id` | 相册 ID（可选） |
+| `server` | 站点地址，默认 `https://zpic.org`；自建 Chevereto 填自己的域名 |
+| `key` | 登录后「Dashboard → Settings → API」生成的 API Key |
+| `album` | 相册 id_encoded（可选），相册地址 `/album/<id_encoded>` |
+| `expiration` | 自动过期分钟数（可选），留空永久保存 |
+| `nsfw` | 是否标记为成人内容（`0` / `1`） |
+
+> 驱动会同时发送 `key` 表单字段和 `X-API-Key` 请求头，所以 Chevereto V3 / V4 都能用。
+> Chevereto 的公开 API 只提供上传，**不支持删除**，删图需要登录站点手动操作。
 
 </details>
 
