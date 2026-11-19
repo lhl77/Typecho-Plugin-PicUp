@@ -662,6 +662,132 @@ document.addEventListener('ab:pageload',bindSummaryRefresh);
     }
     function saveProfiles(p){ getTA().value=JSON.stringify(p,null,2); }
 
+    /* ══════════════════════════════════════════════════════════════════
+     * 驱动选择弹窗（替代原生 <select>）
+     * 图标用内联 SVG（不依赖 AB Admin 的图标字体），颜色走驱动品牌色，
+     * 卡片/弹窗全部使用 var(--md-*, 兜底值)，没有 AB Admin 也能正常显示
+     * ══════════════════════════════════════════════════════════════════ */
+    var DRV_ICON = {
+        box:   '<path d="M12 2 3 7v10l9 5 9-5V7l-9-5Zm0 2.3 6.5 3.6L12 11.5 5.5 7.9 12 4.3ZM5 9.6l6 3.3v6.5l-6-3.3V9.6Zm8 9.8v-6.5l6-3.3v6.5l-6 3.3Z"/>',
+        cloud: '<path d="M19.35 10.04A7.49 7.49 0 0 0 12 4a7.48 7.48 0 0 0-6.64 4.04A5.994 5.994 0 0 0 6 20h13a4.5 4.5 0 0 0 .35-8.96ZM19 18H6a4 4 0 0 1-.33-7.98l.94-.08.44-.83A5.5 5.5 0 0 1 17.5 10.5l.16.96.97.15A2.5 2.5 0 0 1 19 18Z"/>',
+        image: '<path d="M21 19V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2ZM8.5 11.5 11 14.51 14.5 10 19 16H5l3.5-4.5Z"/>',
+        drive: '<path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Zm0 2v5h16V6H4Zm0 7v5h16v-5H4Zm2 1.5h3v2H6v-2Z"/>',
+        link:  '<path d="M10.59 13.41a1.996 1.996 0 0 1 0-2.82l3.54-3.54a2 2 0 1 1 2.83 2.83l-1.42 1.41 1.41 1.42 1.42-1.42a4 4 0 0 0-5.66-5.65l-3.54 3.53a4 4 0 0 0 0 5.66l1.42-1.42Zm2.82-2.82a2 2 0 0 1 0 2.82l-3.54 3.54a2 2 0 1 1-2.83-2.83l1.42-1.41-1.41-1.42-1.42 1.42a4 4 0 0 0 5.66 5.65l3.54-3.53a4 4 0 0 0 0-5.66l-1.42 1.42Z"/>',
+        git:   '<path d="M8 0C3.58 0 0 3.58 0 8a8 8 0 0 0 5.47 7.59c.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.4 7.4 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/>'
+    };
+    /* 每个驱动：icon 类型 + 品牌强调色 */
+    var DRV_STYLE = {
+        local:{i:'drive',a:'#607d8b'}, s3:{i:'cloud',a:'#ff9900'},
+        aliyunoss:{i:'cloud',a:'#ff6a00'}, tencentcos:{i:'cloud',a:'#006eff'},
+        qiniukodo:{i:'cloud',a:'#06aeef'}, upyun:{i:'cloud',a:'#00a0ff'},
+        cloudinary:{i:'cloud',a:'#3448c5'},
+        webdav:{i:'link',a:'#7e57c2'}, github:{i:'git',a:'#24292f'},
+        lsky:{i:'image',a:'#4a90d9'}, cheveretov4:{i:'image',a:'#17a2b8'},
+        smms:{i:'image',a:'#3ecf8e'}, imgur:{i:'image',a:'#1bb76e'},
+        imgbb:{i:'image',a:'#0ea5e9'}, freeimage:{i:'image',a:'#16a34a'},
+        tgimagebed:{i:'image',a:'#26a5e4'}, telegraphimage:{i:'image',a:'#2ca5e0'},
+        cfimgbed:{i:'cloud',a:'#f38020'}, easyimage:{i:'image',a:'#e8562a'},
+        nodeimage:{i:'image',a:'#111111'}, oneimg:{i:'image',a:'#2f7bf6'},
+        zpic:{i:'image',a:'#22c55e'}, zipline:{i:'box',a:'#4f46e5'},
+        xbackbone:{i:'box',a:'#f59e0b'}, chibisafe:{i:'box',a:'#eab308'}
+    };
+    function drvAccent(k){ return (DRV_STYLE[k]||{}).a || 'var(--md-primary,#0a5bd3)'; }
+    /* 优先用官方 logo（与 PicUp 官网同一套素材），没有则回落到内联 SVG */
+    function drvIconHtml(k, size){
+        var meta = DRIVERS[k] || {};
+        var sz = size || 20;
+        if (meta.icon) {
+            return '<img class="picup-drv-logo" src="' + meta.icon + '" alt="" width="' + sz + '" height="' + sz + '" loading="lazy" decoding="async">';
+        }
+        return drvIconSvg(k, sz);
+    }
+    function drvIconSvg(k, size){
+        var st = DRV_STYLE[k] || {};
+        var d  = DRV_ICON[st.i] || DRV_ICON.box;
+        var s  = size || 20;
+        return '<svg viewBox="0 0 24 24" width="'+s+'" height="'+s+'" aria-hidden="true" focusable="false">'+d+'</svg>';
+    }
+
+    var dpMask=null, dpGrid=null, dpOnPick=null;
+
+    function ensurePicker(){
+        if(dpMask) return;
+        dpMask=document.createElement('div');
+        dpMask.className='picup-dpmask';
+        dpMask.setAttribute('aria-hidden','true');
+        dpMask.innerHTML=
+            '<div class="picup-dpdialog" role="dialog" aria-modal="true" aria-labelledby="picup-dp-title">'
+          +   '<div class="picup-dphead">'
+          +     '<div><h4 class="picup-dptitle" id="picup-dp-title">选择存储驱动</h4>'
+          +     '<p class="picup-dpsub">共 <b class="picup-dpcount">0</b> 种可选，点击卡片即切换</p></div>'
+          +     '<button type="button" class="picup-dpclose" aria-label="关闭">'
+          +       '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>'
+          +     '</button>'
+          +   '</div>'
+          +   '<div class="picup-dpbody"><div class="picup-dpgrid"></div></div>'
+          +   '<div class="picup-dpfoot">'
+          +     '<a class="picup-dplink" href="https://picup.lhl.one/#drivers" target="_blank" rel="noopener noreferrer">进入官网查看各储存策略介绍<svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7ZM19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2v7Z"/></svg></a>'
+          +     '<button type="button" class="picup-dpcancel">取消</button>'
+          +   '</div>'
+          + '</div>';
+        document.body.appendChild(dpMask);
+        dpGrid=dpMask.querySelector('.picup-dpgrid');
+        dpMask.addEventListener('click',function(e){ if(e.target===dpMask) closePicker(); });
+        dpMask.querySelector('.picup-dpclose').addEventListener('click',closePicker);
+        dpMask.querySelector('.picup-dpcancel').addEventListener('click',closePicker);
+        document.addEventListener('keydown',function(e){
+            if(e.key==='Escape'&&dpMask&&dpMask.classList.contains('is-open')) closePicker();
+        });
+    }
+
+    function openPicker(current, cb){
+        ensurePicker();
+        dpOnPick=cb;
+        dpGrid.innerHTML='';
+        /* 按名称 A-Z：英文名在前（字母序），中文名在后（按拼音） */
+        var rankOf=function(k){
+            var n=String((DRIVERS[k]||{}).name||k);
+            return /^[\x00-\x7f]/.test(n) ? '0' + n : '1' + n;
+        };
+        var keys=Object.keys(DRIVERS).sort(function(a,b){
+            var ra=rankOf(a), rb=rankOf(b);
+            if(ra.charAt(0)!==rb.charAt(0)) return ra < rb ? -1 : 1;
+            return ra.slice(1).localeCompare(rb.slice(1), 'zh-Hans-CN',
+                {numeric:true, sensitivity:'base'});
+        });
+        keys.forEach(function(k){
+            var d=DRIVERS[k]||{};
+            var card=document.createElement('button');
+            card.type='button';
+            card.className='picup-dpcard'+(k===current?' is-active':'');
+            card.setAttribute('data-k',k);
+            card.innerHTML=
+                '<span class="picup-dpico'+(DRIVERS[k]&&DRIVERS[k].icon?'':' is-glyph')+'" style="--pu-acc:'+drvAccent(k)+'">'+drvIconHtml(k,22)+'</span>'
+              + '<span class="picup-dpmeta"><b class="picup-dpname"></b><code class="picup-dpkey"></code></span>'
+              + '<span class="picup-dptick"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg></span>';
+            card.querySelector('.picup-dpname').textContent=d.name||k;
+            card.querySelector('.picup-dpkey').textContent=k;
+            card.addEventListener('click',function(){
+                var cb2=dpOnPick;
+                closePicker();
+                if(cb2) cb2(k);
+            });
+            dpGrid.appendChild(card);
+        });
+        dpMask.querySelector('.picup-dpcount').textContent=keys.length;
+        dpMask.classList.add('is-open');
+        dpMask.setAttribute('aria-hidden','false');
+        var act=dpGrid.querySelector('.picup-dpcard.is-active');
+        (act||dpGrid.querySelector('.picup-dpcard')||{scrollIntoView:function(){}}).scrollIntoView({block:'nearest'});
+    }
+
+    function closePicker(){
+        if(!dpMask) return;
+        dpMask.classList.remove('is-open');
+        dpMask.setAttribute('aria-hidden','true');
+        dpOnPick=null;
+    }
+
     /* ── 只显示方案名 ── */
     function renderSelect(profiles, selected){
         if(!profileSel) return;
@@ -710,21 +836,37 @@ document.addEventListener('ab:pageload',bindSummaryRefresh);
         if(!profile) return;
         var driverKey=profile.driver||'';
 
-        /* 驱动选择行 */
+        /* 驱动选择行：只读文本框 + 弹窗选择（替代原生下拉） */
         var dRow=document.createElement('div');dRow.className='picup-field-row';
         var dLeft=document.createElement('div');dLeft.className='picup-field-left';
         var dLbl=document.createElement('label');dLbl.className='picup-field-label';
         dLbl.textContent='驱动类型 *';
         dLeft.appendChild(dLbl);
-        var dSel=document.createElement('select');dSel.className='picup-ctrl picup-input';
-        dSel.dataset.field='driver';
-        Object.keys(DRIVERS).forEach(function(k){
-            var o=document.createElement('option');
-            o.value=k; o.textContent=DRIVERS[k].name;
-            if(k===driverKey) o.selected=true;
-            dSel.appendChild(o);
+
+        var dPick=document.createElement('div');dPick.className='picup-drv-pick';
+        var dView=document.createElement('div');dView.className='picup-drv-view';
+        dView.innerHTML=
+            '<span class="picup-drv-ico'+(DRIVERS[driverKey]&&DRIVERS[driverKey].icon?'':' is-glyph')+'" style="--pu-acc:'+drvAccent(driverKey)+'">'+drvIconHtml(driverKey,20)+'</span>'
+          + '<span class="picup-drv-txt">'
+          +   '<b class="picup-drv-name"></b>'
+          +   '<code class="picup-drv-key"></code>'
+          + '</span>';
+        dView.querySelector('.picup-drv-name').textContent=(DRIVERS[driverKey]&&DRIVERS[driverKey].name)||'未选择驱动';
+        dView.querySelector('.picup-drv-key').textContent=driverKey||'—';
+        if(!driverKey) dView.classList.add('is-empty');
+
+        var dBtn=document.createElement('button');
+        dBtn.type='button';dBtn.className='picup-drv-btn';
+        dBtn.innerHTML='选择驱动';
+        dBtn.addEventListener('click',function(){
+            openPicker(driverKey,function(k){
+                var p=getProfiles();var n=profileSel.value;
+                if(p[n]){p[n].driver=k;saveProfiles(p);renderForm(p[n]);}
+            });
         });
-        dLeft.appendChild(dSel);
+
+        dPick.appendChild(dView);dPick.appendChild(dBtn);
+        dLeft.appendChild(dPick);
         dRow.appendChild(dLeft);
         formDiv.appendChild(dRow);
 
@@ -752,11 +894,6 @@ document.addEventListener('ab:pageload',bindSummaryRefresh);
             el.addEventListener('change', syncDriverFields);
             el.addEventListener('input', debounce(syncDriverFields,300));
         });
-        dSel.addEventListener('change',function(){
-            var p=getProfiles();var n=profileSel.value;
-            if(p[n]){p[n].driver=this.value;saveProfiles(p);renderForm(p[n]);}
-        });
-
         /* 渲染扩展面板 */
         renderExtensions(profile);
     }
@@ -909,7 +1046,8 @@ document.addEventListener('ab:pageload',bindSummaryRefresh);
                 if(!name||!name.trim()) return; name=name.trim();
                 var p=getProfiles();
                 if(p[name]){picupDialog('alert','方案 "'+name+'" 已存在。');return;}
-                var dk=Object.keys(DRIVERS)[0]||'local';
+                /* 新方案默认用本地存储（不需要任何外部配置就能先用起来） */
+                var dk=DRIVERS['local']?'local':(Object.keys(DRIVERS)[0]||'local');
                 p[name]={driver:dk,_extensions:{}};saveProfiles(p);renderSelect(p,name);renderForm(p[name]);
             });
         });

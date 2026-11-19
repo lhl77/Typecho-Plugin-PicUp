@@ -5,8 +5,8 @@
  *
  * @package PicUp
  * @author LHL
- * @version 1.3.2
- * @link https://github.com/lhl77/Typecho-Plugin-PicUp
+ * @version 1.3.3
+ * @link https://picup.lhl.one
  */
 
 namespace TypechoPlugin\PicUp;
@@ -670,7 +670,7 @@ class Plugin implements PluginInterface
                     CURLOPT_MAXREDIRS      => 3,
                     CURLOPT_TIMEOUT        => 30,
                     CURLOPT_CONNECTTIMEOUT => 10,
-                    CURLOPT_USERAGENT      => 'PicUp-Migrate/1.3.2',
+                    CURLOPT_USERAGENT      => 'PicUp-Migrate/1.3.3',
                 ]);
                 $ok   = curl_exec($ch);
                 $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -1428,7 +1428,7 @@ END_SCRIPT;
     /**
      * 静态资源的缓存版本号。
      *
-     * 用 `mtime-size` 而不是插件版本号：版本号改动不频繁（现在 1.3.2），改了文件但没发版时
+     * 用 `mtime-size` 而不是插件版本号：版本号改动不频繁（现在 1.3.3），改了文件但没发版时
      * 浏览器 / CDN 会一直吐旧文件（`picup-config.css` 曾经就没带任何版本号）。
      * 每次部署文件被覆盖 → mtime 变化 → URL 变化，一定能取到新内容。
      */
@@ -1440,6 +1440,21 @@ END_SCRIPT;
             return (string)time();
         }
         return $mtime . '-' . (int)@filesize($file);
+    }
+
+    /**
+     * 驱动图标的公开地址（assets/img/drivers/<key>.svg|png）。
+     * 找不到图标时返回空串，前端会回落到内置 SVG 图形。
+     */
+    private static function driverIconUrl(string $key, string $assetsUrl): string
+    {
+        foreach (['svg', 'png', 'webp'] as $ext) {
+            $rel = 'img/drivers/' . $key . '.' . $ext;
+            if (is_file(__DIR__ . '/assets/' . $rel)) {
+                return $assetsUrl . '/' . $rel . '?v=' . self::assetVer($rel);
+            }
+        }
+        return '';
     }
 
     public static function config(Form $form)
@@ -1454,7 +1469,7 @@ END_SCRIPT;
         }
 
         // 0. 顶部插件信息 & AdminBeautify 推荐
-        $pluginVersion = '1.3.2';
+        $pluginVersion = '1.3.3';
         try {
             $siteUrl = rtrim(Options::alloc()->siteUrl, '/');
         } catch (\Throwable $e) {
@@ -1517,6 +1532,7 @@ END_SCRIPT;
             $driversMeta[$key] = [
                 'name'   => $class::getName(),
                 'fields' => $class::getConfigFields(),
+                'icon'   => self::driverIconUrl($key, $assetsUrl),
             ];
         }
         $extensionsMeta = [];
@@ -1585,7 +1601,7 @@ END_SCRIPT;
     <h4 class="picup-info-title">多存储后端上传 &amp; 处理插件</h4>
     <div class="picup-info-meta">
       <span class="pu-by">by LHL</span><span class="pu-sep">·</span>
-      <a href="https://blog.lhl.one" target="_blank">作者博客</a><span class="pu-sep">·</span>
+      <a href="https://picup.lhl.one" target="_blank">官网</a><span class="pu-sep">·</span>
       <a href="https://github.com/lhl77/Typecho-Plugin-PicUp" target="_blank">GitHub</a><span class="pu-sep">·</span>
       <a href="https://blog.lhl.one/artical/1026.html" target="_blank">使用文档</a>
     </div>

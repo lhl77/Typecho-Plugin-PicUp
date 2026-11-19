@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://i.see.you/2026/07/26/5dnU/6cf4c80b939c47baefb00b66bd567b8a.jpg" width="30%" />
+<img src="assets/img/picup-mark.png" width="112" alt="PicUp" />
 
 # PicUp for Typecho
 
@@ -14,7 +14,8 @@
 
 <br>
 
-[使用与开发文档](https://blog.lhl.one/artical/1026.html)
+[![官网](https://img.shields.io/badge/%E5%AE%98%E7%BD%91-picup.lhl.one-0a5bd3?logoColor=white)](https://picup.lhl.one)
+[![使用与开发文档](https://img.shields.io/badge/%E4%BD%BF%E7%94%A8%E4%B8%8E%E5%BC%80%E5%8F%91%E6%96%87%E6%A1%A3-blog.lhl.one-55624c?logoColor=white)](https://blog.lhl.one/artical/1026.html)
 
 </div>
 
@@ -22,7 +23,7 @@
 
 ## 功能特性
 
-- **多存储后端** — 支持 12+ 种云存储 / 图床，可随时切换
+- **多存储后端** — 支持 25 种云存储 / 图床 / 协议，可随时切换
 - **多 Profile 配置** — 同时保存多套配置方案，一键应用切换
 - **图像处理扩展** — 图片压缩、自动转 WebP、自动转 AVIF、EXIF 信息抹除、添加水印，可逐个开关
 - **自动备份（Beta）** — 同一张图上传后自动再传到多个方案，并记录每个方案的链接
@@ -35,23 +36,30 @@
 
 | 驱动 | 标识 | 说明 |
 |------|------|------|
+| **阿里云 OSS** | `aliyunoss` | 阿里云对象存储（原生 V1 签名） |
+| **CloudFlare ImgBed** | `cfimgbed` | 基于 Cloudflare Workers 的图床 |
+| **Chevereto V4** | `cheveretoV4` | Chevereto V4 自建图床，支持相册 |
+| **chibisafe** | `chibisafe` | chibisafe 自建图床，x-api-key 认证 |
+| **Cloudinary** | `cloudinary` | Cloudinary，支持签名/免签名上传，自带 CDN 与图片变换 |
+| **EasyImage 简单图床** | `easyimage` | EasyImage 自建图床 |
+| **FreeImage.host** | `freeimage` | FreeImage.host 免费图床（Chevereto V1 API，不支持删除） |
+| **GitHub 仓库** | `github` | 通过 GitHub Contents API 存储，支持 CDN 加速 |
+| **ImgBB** | `imgbb` | ImgBB 免费图床，只需 API Key（不支持 API 删除） |
+| **Imgur** | `imgur` | Imgur 图床，支持匿名/账户上传 |
 | **本地存储** | `local` | 遵循 Typecho 原生逻辑，存储至 `usr/uploads/` |
 | **Lsky Pro 兰空图床** | `lsky` | 支持 v1 / v2 API |
-| **AWS S3 / 兼容** | `s3` | 支持 AWS S3、MinIO、Cloudflare R2、阿里云 OSS（S3 兼容）等 |
-| **WebDAV** | `webdav` | 标准 WebDAV 协议 |
-| **GitHub 仓库** | `github` | 通过 GitHub Contents API 存储，支持 CDN 加速 |
-| **S.EE (SM.MS)** | `smms` | S.EE 免费图床 |
-| **阿里云 OSS** | `aliyunoss` | 阿里云对象存储（原生 V1 签名） |
-| **腾讯云 COS** | `tencentcos` | 腾讯云对象存储（COS V5 签名） |
-| **七牛云 KODO** | `qiniukodo` | 七牛云对象存储 |
-| **又拍云 USS** | `upyun` | 又拍云云存储 |
-| **EasyImage 简单图床** | `easyimage` | EasyImage 自建图床 |
-| **CloudFlare ImgBed** | `cfimgbed` | 基于 Cloudflare Workers 的图床 |
 | **NodeImage** | `nodeimage` | NodeImage 图床，通过 X-API-Key 认证 |
-| **Chevereto V4** | `cheveretoV4` | Chevereto V4 自建图床，支持相册 |
-| **Imgur** | `imgur` | Imgur 图床，支持匿名/账户上传 |
 | **初春图床 (OneImg)** | `oneimg` | 初春图床，Bearer Token 认证 |
+| **七牛云 KODO** | `qiniukodo` | 七牛云对象存储 |
+| **AWS S3 / 兼容** | `s3` | 支持 AWS S3、MinIO、Cloudflare R2、阿里云 OSS（S3 兼容）等 |
+| **S.EE (SM.MS)** | `smms` | S.EE 免费图床 |
+| **Telegraph-Image** | `telegraphimage` | Cloudflare Pages + Telegram 存储，可选 Basic 认证 |
+| **腾讯云 COS** | `tencentcos` | 腾讯云对象存储（COS V5 签名） |
 | **Telegram 图床** | `tgimagebed` | tg-imagebed 项目，支持匿名和 Token 上传 |
+| **又拍云 USS** | `upyun` | 又拍云云存储 |
+| **WebDAV** | `webdav` | 标准 WebDAV 协议 |
+| **X BackBone** | `xbackbone` | X BackBone 自建图床（PHP），Bearer Token 认证 |
+| **Zipline** | `zipline` | Zipline 自建图床，API Token 认证 |
 | **Zpic 图床** | `zpic` | Zpic / ImgURL Pro，支持 V2/V3 API |
 
 ---

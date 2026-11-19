@@ -670,3 +670,211 @@
 [data-theme="dark"] .picup-mig-result .is-ok{color:#86efac!important;}
 [data-theme="dark"] .picup-mig-result .is-warn{color:#fcd34d!important;}
 [data-theme="dark"] .picup-mig-result .is-err{color:#f2b8b5!important;}
+
+/* ========================================================================
+ * 驱动选择：只读展示行 + 选择按钮 + 弹窗
+ * 全部使用 var(--md-*, 兜底值)，装了 AB Admin 跟随其主色与亮暗主题，
+ * 没装也能用 MD3 默认配色正常显示
+ * ======================================================================== */
+.picup-drv-pick{display:flex!important;align-items:center!important;gap:10px!important;max-width:660px!important;}
+.picup-drv-view{
+    flex:1!important;min-width:0!important;min-height:46px!important;
+    display:flex!important;align-items:center!important;gap:10px!important;
+    padding:7px 12px!important;border-radius:12px!important;box-sizing:border-box!important;
+    border:1px solid var(--md-outline-variant,#cac4d0)!important;
+    background:var(--md-surface-container-low,#f7f2fa)!important;
+}
+.picup-drv-view.is-empty{border-style:dashed!important;}
+.picup-drv-ico{
+    width:32px!important;height:32px!important;flex:0 0 32px!important;
+    display:inline-flex!important;align-items:center!important;justify-content:center!important;
+    border-radius:9px!important;line-height:1!important;box-sizing:border-box!important;
+    padding:5px!important;
+    /* 与 PicUp 官网的 .driver__icon--logo 保持一致：白底片 + 极淡描边，logo 等比内嵌 */
+    background:#ffffff!important;
+    box-shadow:inset 0 0 0 1px rgba(0,0,0,.09)!important;
+}
+/* 没有官方 logo 时的兜底：品牌色淡底 + 内联 SVG */
+.picup-drv-ico.is-glyph{
+    padding:6px!important;background:color-mix(in srgb,var(--pu-acc,#0a5bd3) 14%,transparent)!important;
+    box-shadow:none!important;color:var(--pu-acc,#0a5bd3)!important;
+}
+.picup-drv-ico svg,.picup-dpico svg{fill:currentColor!important;display:block!important;}
+.picup-drv-logo,.picup-dp-logo{width:100%!important;height:100%!important;object-fit:contain!important;display:block!important;}
+.picup-drv-txt{display:flex!important;flex-direction:column!important;gap:1px!important;min-width:0!important;}
+.picup-drv-name{
+    font-size:13px!important;font-weight:600!important;line-height:1.3!important;
+    color:var(--md-on-surface,#1c1b1f)!important;
+    white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;
+}
+.picup-drv-key{
+    font-size:11px!important;line-height:1.3!important;padding:0!important;background:none!important;
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace!important;
+    color:var(--md-on-surface-variant,#49454f)!important;opacity:.85!important;
+}
+.picup-drv-btn{
+    flex:0 0 auto!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;
+    height:46px!important;padding:0 20px!important;border-radius:9999px!important;cursor:pointer!important;
+    border:1px solid transparent!important;
+    background:var(--md-primary,#0a5bd3)!important;color:var(--md-on-primary,#fff)!important;
+    font-size:13px!important;font-weight:600!important;white-space:nowrap!important;
+    transition:box-shadow .15s,filter .15s!important;
+}
+.picup-drv-btn:hover{filter:brightness(1.06)!important;box-shadow:0 2px 8px rgba(0,0,0,.16)!important;}
+.picup-drv-btn:active{filter:brightness(.95)!important;}
+.picup-drv-btn:focus-visible{outline:2px solid var(--md-primary,#0a5bd3)!important;outline-offset:2px!important;}
+
+/* ── 弹窗 ── */
+.picup-dpmask{
+    position:fixed!important;inset:0!important;z-index:100000!important;
+    display:none!important;align-items:center!important;justify-content:center!important;padding:24px!important;
+    background:rgba(0,0,0,.32)!important;
+}
+.picup-dpmask.is-open{display:flex!important;}
+.picup-dpdialog{
+    width:min(760px,100%)!important;max-height:min(78vh,760px)!important;box-sizing:border-box!important;
+    display:flex!important;flex-direction:column!important;overflow:hidden!important;
+    border-radius:24px!important;
+    border:1px solid var(--md-outline-variant,#cac4d0)!important;
+    background:var(--md-surface,#fff)!important;
+    box-shadow:0 24px 64px -16px rgba(0,0,0,.45)!important;
+}
+.picup-dphead{
+    display:flex!important;align-items:flex-start!important;justify-content:space-between!important;
+    gap:12px!important;padding:20px 22px 10px!important;
+}
+.picup-dptitle{
+    margin:0!important;font-size:16px!important;font-weight:700!important;line-height:1.35!important;
+    color:var(--md-on-surface,#1c1b1f)!important;
+}
+.picup-dpsub{
+    margin:4px 0 0!important;font-size:12px!important;line-height:1.4!important;
+    color:var(--md-on-surface-variant,#49454f)!important;opacity:.85!important;
+}
+.picup-dpclose{
+    flex:0 0 auto!important;width:36px!important;height:36px!important;padding:0!important;
+    display:inline-flex!important;align-items:center!important;justify-content:center!important;
+    border-radius:9999px!important;border:1px solid transparent!important;background:transparent!important;
+    color:var(--md-on-surface-variant,#49454f)!important;cursor:pointer!important;
+}
+.picup-dpclose svg{fill:currentColor!important;}
+.picup-dpclose:hover{background:var(--md-surface-container-highest,#e6e1e5)!important;}
+.picup-dpbody{flex:1!important;overflow:auto!important;padding:6px 22px 10px!important;}
+.picup-dpgrid{display:grid!important;grid-template-columns:repeat(auto-fill,minmax(212px,1fr))!important;gap:10px!important;}
+.picup-dpcard{
+    display:flex!important;align-items:center!important;gap:10px!important;text-align:left!important;
+    padding:10px 12px!important;border-radius:14px!important;cursor:pointer!important;box-sizing:border-box!important;
+    border:1px solid var(--md-outline-variant,#cac4d0)!important;
+    background:var(--md-surface,#fff)!important;
+    transition:background .15s,border-color .15s!important;
+}
+.picup-dpcard:hover{background:var(--md-surface-container-low,#f7f2fa)!important;}
+.picup-dpcard.is-active{
+    border-color:var(--md-primary,#0a5bd3)!important;
+    background:color-mix(in srgb,var(--md-primary,#0a5bd3) 8%,var(--md-surface,#fff))!important;
+}
+.picup-dpcard:focus-visible{outline:2px solid var(--md-primary,#0a5bd3)!important;outline-offset:2px!important;}
+.picup-dpico{
+    width:36px!important;height:36px!important;flex:0 0 36px!important;
+    display:inline-flex!important;align-items:center!important;justify-content:center!important;
+    border-radius:10px!important;line-height:1!important;box-sizing:border-box!important;
+    padding:6px!important;
+    background:#ffffff!important;
+    box-shadow:inset 0 0 0 1px rgba(0,0,0,.09)!important;
+}
+.picup-dpico.is-glyph{
+    padding:7px!important;background:color-mix(in srgb,var(--pu-acc,#0a5bd3) 14%,transparent)!important;
+    box-shadow:none!important;color:var(--pu-acc,#0a5bd3)!important;
+}
+.picup-dpmeta{display:flex!important;flex-direction:column!important;gap:1px!important;min-width:0!important;flex:1!important;}
+.picup-dpname{
+    font-size:13px!important;font-weight:600!important;line-height:1.3!important;
+    color:var(--md-on-surface,#1c1b1f)!important;
+    white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;
+}
+.picup-dpkey{
+    font-size:11px!important;line-height:1.3!important;padding:0!important;background:none!important;
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace!important;
+    color:var(--md-on-surface-variant,#49454f)!important;opacity:.85!important;
+}
+.picup-dptick{
+    flex:0 0 16px!important;display:inline-flex!important;align-items:center!important;
+    color:var(--md-primary,#0a5bd3)!important;opacity:0!important;transition:opacity .15s!important;
+}
+.picup-dptick svg{fill:currentColor!important;}
+.picup-dpcard.is-active .picup-dptick{opacity:1!important;}
+.picup-dpfoot{
+    display:flex!important;align-items:center!important;justify-content:space-between!important;gap:8px!important;
+    padding:12px 22px 16px!important;
+    border-top:1px solid var(--md-outline-variant,#cac4d0)!important;
+    background:var(--md-surface-container-low,#f7f2fa)!important;
+}
+.picup-dpcancel{
+    display:inline-flex!important;align-items:center!important;justify-content:center!important;
+    height:38px!important;padding:0 18px!important;border-radius:9999px!important;cursor:pointer!important;
+    border:1px solid var(--md-outline-variant,#cac4d0)!important;background:transparent!important;
+    color:var(--md-on-surface,#1c1b1f)!important;font-size:13px!important;font-weight:600!important;
+}
+.picup-dpcancel:hover{background:var(--md-surface-container-highest,#e6e1e5)!important;}
+
+/* ── 暗色（AB Admin 给 <html> 加 data-theme="dark"）── */
+[data-theme="dark"] .picup-drv-view{
+    border-color:var(--md-dark-outline-variant,#49454f)!important;
+    background:var(--md-dark-surface-container-low,#211f26)!important;
+}
+[data-theme="dark"] .picup-drv-name,
+[data-theme="dark"] .picup-dptitle,
+[data-theme="dark"] .picup-dpname,
+[data-theme="dark"] .picup-dpcancel{color:var(--md-dark-on-surface,#e6e1e5)!important;}
+[data-theme="dark"] .picup-drv-key,
+[data-theme="dark"] .picup-dpsub,
+[data-theme="dark"] .picup-dpkey,
+[data-theme="dark"] .picup-dpclose{color:var(--md-dark-on-surface-variant,#cac4d0)!important;}
+[data-theme="dark"] .picup-dpdialog{
+    border-color:var(--md-dark-outline-variant,#49454f)!important;
+    background:var(--md-dark-surface,#1c1b1f)!important;
+    box-shadow:0 24px 64px -16px rgba(0,0,0,.75)!important;
+}
+[data-theme="dark"] .picup-dpcard{
+    border-color:var(--md-dark-outline-variant,#49454f)!important;
+    background:var(--md-dark-surface,#1c1b1f)!important;
+}
+[data-theme="dark"] .picup-dpcard:hover{background:var(--md-dark-surface-container-low,#211f26)!important;}
+[data-theme="dark"] .picup-dpcard.is-active{
+    background:color-mix(in srgb,var(--md-dark-primary,#aec6ff) 14%,transparent)!important;
+}
+[data-theme="dark"] .picup-dpfoot{
+    border-color:var(--md-dark-outline-variant,#49454f)!important;
+    background:var(--md-dark-surface-container-low,#211f26)!important;
+}
+[data-theme="dark"] .picup-dpclose:hover,
+[data-theme="dark"] .picup-dpcancel:hover{background:var(--md-dark-surface-container-highest,#36343b)!important;}
+[data-theme="dark"] .picup-dpcancel{border-color:var(--md-dark-outline,#938f99)!important;}
+[data-theme="dark"] .picup-dpmask{background:rgba(0,0,0,.55)!important;}
+
+/* 暗色下 logo 底片跟官网一样用 #f2f5fa，保证深色 logo 依然可读 */
+[data-theme="dark"] .picup-drv-ico,
+[data-theme="dark"] .picup-dpico{background:#f2f5fa!important;}
+/* 兜底图形：提亮深色品牌色，否则糊在背景里 */
+[data-theme="dark"] .picup-drv-ico.is-glyph,
+[data-theme="dark"] .picup-dpico.is-glyph{
+    background:color-mix(in srgb,var(--pu-acc,#0a5bd3) 24%,transparent)!important;
+    color:color-mix(in srgb,var(--pu-acc,#0a5bd3) 52%,#ffffff 48%)!important;
+}
+
+/* 弹窗头部的官网入口 */
+.picup-dplink{
+    display:inline-flex!important;align-items:center!important;gap:3px!important;
+    color:var(--md-primary,#0a5bd3)!important;text-decoration:none!important;font-weight:600!important;
+}
+.picup-dplink:hover{text-decoration:underline!important;}
+.picup-dplink svg{fill:currentColor!important;flex:0 0 auto!important;}
+[data-theme="dark"] .picup-dplink{color:var(--md-dark-primary-container,#d3e3ff)!important;}
+
+/* 窄屏：按钮缩短、网格单列 */
+@media (max-width:600px){
+    .picup-drv-pick{flex-wrap:wrap!important;}
+    .picup-drv-btn{width:100%!important;}
+    .picup-dpgrid{grid-template-columns:1fr!important;}
+    .picup-dpdialog{max-height:86vh!important;}
+}
