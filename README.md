@@ -7,7 +7,7 @@
 **多存储后端图片/附件上传插件，支持多种云存储服务，多 Profile 配置，图像处理扩展。**
 
 [![PHP](https://img.shields.io/badge/PHP-%3E%3D7.4-777bb3?logo=php&logoColor=white)](https://www.php.net/)
-[![Typecho](https://img.shields.io/badge/Typecho-1.3.0%2B-4a90d9)](https://typecho.org/)
+[![Typecho](https://img.shields.io/badge/Typecho-1.2.1%2B-4a90d9)](https://typecho.org/)
 [![GitHub release](https://img.shields.io/github/v/release/lhl77/Typecho-Plugin-PicUp?color=brightgreen&logo=github)](https://github.com/lhl77/Typecho-Plugin-PicUp/releases)
 [![License](https://img.shields.io/github/license/lhl77/Typecho-Plugin-PicUp?color=blue)](LICENSE)
 [![Stars](https://img.shields.io/github/stars/lhl77/Typecho-Plugin-PicUp?style=flat&logo=github)](https://github.com/lhl77/Typecho-Plugin-PicUp/stargazers)
