@@ -1,19 +1,15 @@
 <?php
 
 /**
- * PicUp for Typecho - zPic 图床驱动
+ * PicUp for Typecho - Zpic 图床驱动
  *
- * zPic（https://zpic.org）基于 Chevereto V3 构建，使用其 API v1 上传：
- *   POST {server}/api/1/upload
- *   multipart: key=<API Key>、action=upload、source=<文件>
- *   可选：album（相册 id_encoded）、expiration（过期分钟数）、nsfw（0/1）
- *
- * 兼容性：同时发送 key 表单字段与 X-API-Key 请求头，
- * 因此 Chevereto V3（字段鉴权）与 V4（请求头鉴权）站点都能用。
+ * 使用 Zpic V3 API（兼容 ImgURL Pro V2 API）
+ * V3 文档：POST /api/v3/upload，Authorization: Bearer <token>
+ * V2 文档：POST /api/v2/upload，uid + token 参数
  *
  * @package PicUp
  * @author LHL
- * @version 1.1.0
+ * @version 1.0.0
  */
 
 namespace TypechoPlugin\PicUp\vendor;
@@ -30,127 +26,186 @@ class ZpicDriver implements DriverInterface
 
     public static function getName(): string
     {
-        return 'zPic 图床';
+        return 'Zpic 图床';
     }
 
     public static function getConfigFields(): array
     {
         return [
             'server' => [
-                'label'       => '站点地址',
+                'label'       => '图床域名',
                 'type'        => 'text',
-                'default'     => 'https://zpic.org',
-                'description' => '默认为 https://zpic.org；自建 Chevereto 站点填自己的域名（末尾不加 /）',
+                'default'     => '',
+                'description' => '图床的基础域名，如 https://zpic.example.com（末尾不加 /）',
                 'required'    => true,
             ],
-            'key' => [
-                'label'       => 'API Key',
+            'api_version' => [
+                'label'       => 'API 版本',
+                'type'        => 'select',
+                'default'     => 'v3',
+                'description' => 'V3 使用 Bearer Token（推荐），V2 使用 uid + token',
+                'required'    => true,
+                'options'     => [
+                    'v3' => 'V3（Bearer Token，推荐）',
+                    'v2' => 'V2（uid + token，兼容 ImgURL Pro）',
+                ],
+            ],
+            'token' => [
+                'label'       => 'Token / API Key',
                 'type'        => 'password',
                 'default'     => '',
-                'description' => '登录后在「Dashboard → Settings → API」里生成',
+                'description' => 'V3：在【后台 - 开放接口】获取，格式 sk-xxx。V2：Token 值（不含前缀）',
                 'required'    => true,
             ],
-            'album' => [
-                'label'       => '相册 ID（可选）',
+            'uid' => [
+                'label'       => 'UID（仅 V2）',
                 'type'        => 'text',
                 'default'     => '',
-                'description' => '上传到指定相册时填写相册的 id_encoded（相册地址 /album/<id_encoded>）',
+                'description' => 'V2 API 所需的 UID，V3 版本留空即可',
                 'required'    => false,
             ],
-            'expiration' => [
-                'label'       => '自动过期（分钟，可选）',
+            'album_id' => [
+                'label'       => '相册 ID',
                 'type'        => 'number',
-                'default'     => '',
-                'description' => '留空表示永久保存；站点开启该功能后才会生效',
-                'required'    => false,
-            ],
-            'nsfw' => [
-                'label'       => '标记为成人内容',
-                'type'        => 'select',
                 'default'     => '0',
-                'description' => '部分站点开启 NSFW 分区时会用到，默认否',
+                'description' => '上传到指定相册，0 表示默认相册',
                 'required'    => false,
-                'options'     => [
-                    '0' => '否',
-                    '1' => '是',
-                ],
             ],
         ];
     }
 
     public function upload(string $localFile, string $remotePath, string $mimeType)
     {
-        $server = rtrim((string)($this->config['server'] ?? ''), '/');
-        $key    = trim((string)($this->config['key'] ?? ''));
+        $server  = rtrim($this->config['server'] ?? '', '/');
+        $token   = $this->config['token'] ?? '';
+        $version = $this->config['api_version'] ?? 'v3';
 
-        if ($server === '') {
-            $server = 'https://zpic.org';
-        }
-        if ($key === '') {
-            error_log('[PicUp][ZPic] 配置不完整：API Key 为空');
+        if (empty($server) || empty($token)) {
+            error_log('[PicUp][Zpic] 配置不完整：server 或 token 为空');
             return false;
         }
 
+        if ($version === 'v2') {
+            return $this->uploadV2($localFile, $server, $token, $mimeType, basename($remotePath));
+        }
+
+        return $this->uploadV3($localFile, $server, $token, $mimeType, basename($remotePath));
+    }
+
+    /**
+     * V3 API 上传：POST /api/v3/upload
+     * Authorization: Bearer <token>
+     */
+    private function uploadV3(string $localFile, string $server, string $token, string $mimeType, string $fileName)
+    {
+        $url = $server . '/api/v3/upload';
+
+        $albumId  = (int)($this->config['album_id'] ?? 0);
+        $params   = json_encode(['album_id' => $albumId, 'dedup' => false]);
+
         $postFields = [
-            'key'    => $key,
-            'action' => 'upload',
-            'format' => 'json',
-            'source' => new \CURLFile($localFile, $mimeType ?: 'application/octet-stream', basename($remotePath)),
+            'file'   => new \CURLFile($localFile, $mimeType ?: 'application/octet-stream', $fileName),
+            'params' => $params,
         ];
-
-        $album = trim((string)($this->config['album'] ?? ''));
-        if ($album !== '') {
-            $postFields['album'] = $album;
-        }
-
-        $expiration = trim((string)($this->config['expiration'] ?? ''));
-        if ($expiration !== '' && (int)$expiration > 0) {
-            $postFields['expiration'] = (int)$expiration;
-        }
-
-        if ((string)($this->config['nsfw'] ?? '0') === '1') {
-            $postFields['nsfw'] = 1;
-        }
 
         $headers = [
-            // Chevereto V4 走请求头鉴权；V3 会忽略这个头
-            'X-API-Key: ' . $key,
-            'Accept: application/json',
+            'Authorization: Bearer ' . $token,
         ];
 
-        $response = $this->curlPost($server . '/api/1/upload', $postFields, $headers);
+        $response = $this->curlPost($url, $postFields, $headers);
         if ($response === false) {
-            error_log('[PicUp][ZPic] cURL 请求失败');
+            error_log('[PicUp][Zpic] V3 cURL 请求失败');
             return false;
         }
 
         $data = json_decode($response, true);
         if (!is_array($data)) {
-            error_log('[PicUp][ZPic] 响应解析失败：' . substr($response, 0, 200));
+            error_log('[PicUp][Zpic] V3 响应解析失败：' . substr($response, 0, 200));
             return false;
         }
 
-        $image = $data['image'] ?? null;
-        if (is_array($image)) {
-            if (!empty($image['url'])) {
-                return (string)$image['url'];
-            }
-            if (!empty($image['display_url'])) {
-                return (string)$image['display_url'];
-            }
+        if (($data['code'] ?? -1) === 200 && !empty($data['data']['url'])) {
+            return $data['data']['url'];
         }
 
-        $errMsg = $data['error']['message']
-            ?? $data['status_txt']
-            ?? json_encode($data, JSON_UNESCAPED_UNICODE);
-        error_log('[PicUp][ZPic] 上传失败（status=' . ($data['status_code'] ?? '?') . '）：' . $errMsg);
+        error_log('[PicUp][Zpic] V3 上传失败，code=' . ($data['code'] ?? '?') . '，msg=' . ($data['msg'] ?? ''));
+        return false;
+    }
+
+    /**
+     * V2 API 上传：POST /api/v2/upload
+     * 表单字段：file, uid, token, album_id
+     */
+    private function uploadV2(string $localFile, string $server, string $token, string $mimeType, string $fileName)
+    {
+        $url = $server . '/api/v2/upload';
+        $uid = $this->config['uid'] ?? '';
+
+        if (empty($uid)) {
+            error_log('[PicUp][Zpic] V2 模式需要填写 UID');
+            return false;
+        }
+
+        $postFields = [
+            'file'  => new \CURLFile($localFile, $mimeType ?: 'application/octet-stream', $fileName),
+            'uid'   => $uid,
+            'token' => $token,
+        ];
+
+        $albumId = (int)($this->config['album_id'] ?? 0);
+        if ($albumId > 0) {
+            $postFields['album_id'] = $albumId;
+        }
+
+        $response = $this->curlPost($url, $postFields, []);
+        if ($response === false) {
+            error_log('[PicUp][Zpic] V2 cURL 请求失败');
+            return false;
+        }
+
+        $data = json_decode($response, true);
+        if (!is_array($data)) {
+            error_log('[PicUp][Zpic] V2 响应解析失败：' . substr($response, 0, 200));
+            return false;
+        }
+
+        if (($data['code'] ?? -1) === 200 && !empty($data['data']['url'])) {
+            return $data['data']['url'];
+        }
+
+        error_log('[PicUp][Zpic] V2 上传失败，code=' . ($data['code'] ?? '?') . '，msg=' . ($data['msg'] ?? ''));
         return false;
     }
 
     public function delete(string $remotePath): bool
     {
-        // Chevereto 的公开 API 只提供上传，没有删除接口
-        error_log('[PicUp][ZPic] 该图床的 API 不支持删除，请登录站点在图片页手动删除');
+        // remotePath 格式：zpic://<imgid>|<url>
+        $imgId = $this->extractImgId($remotePath);
+        if (empty($imgId)) {
+            return false;
+        }
+
+        $server  = rtrim($this->config['server'] ?? '', '/');
+        $token   = $this->config['token'] ?? '';
+        $version = $this->config['api_version'] ?? 'v3';
+
+        if (empty($server) || empty($token)) {
+            return false;
+        }
+
+        if ($version === 'v3') {
+            $url     = $server . '/api/v3/delete_images';
+            $headers = [
+                'Authorization: Bearer ' . $token,
+                'Content-Type: application/json',
+            ];
+            $body    = json_encode(['image_ids' => [$imgId]]);
+            $resp    = $this->curlRequest('POST', $url, $body, $headers);
+            $data    = json_decode($resp, true);
+            return is_array($data) && ($data['code'] ?? -1) === 200;
+        }
+
+        // V2 通过删除链接删除（若有保存则访问该 URL）
         return false;
     }
 
@@ -165,8 +220,14 @@ class ZpicDriver implements DriverInterface
 
     public function getStoredPath(string $remotePath, string $uploadedUrl): string
     {
-        // 上传直接返回完整 URL 且没有可用的删除接口，存 URL 即可
-        return (string)$uploadedUrl;
+        // 需要保存 imgid 用于删除，格式：zpic://<imgid>|<url>
+        // imgid 从 upload 响应中无法直接获取（upload 只返回 URL），
+        // 因此这里尝试从 URL 中反解 imgid（Zpic URL 格式：https://domain/YYYY/MM/DD/imgid.ext）
+        $imgId = $this->extractImgIdFromUrl($uploadedUrl);
+        if ($imgId) {
+            return 'zpic://' . $imgId . '|' . $uploadedUrl;
+        }
+        return $uploadedUrl;
     }
 
     public function alwaysNewPath(): bool
@@ -175,6 +236,33 @@ class ZpicDriver implements DriverInterface
     }
 
     // ---- 内部辅助 ----
+
+    private function extractImgId(string $remotePath): string
+    {
+        if (strpos($remotePath, 'zpic://') === 0) {
+            $parts = explode('|', substr($remotePath, 7), 2);
+            return $parts[0] ?? '';
+        }
+        return '';
+    }
+
+    /**
+     * 从 URL 中提取 imgid（8 位字母+数字，在文件名部分）
+     * 例：https://domain.com/2026/01/19/vzB3OYiy.jpg  →  vzB3OYiy
+     */
+    private function extractImgIdFromUrl(string $url): string
+    {
+        $path = parse_url($url, PHP_URL_PATH);
+        if (!$path) {
+            return '';
+        }
+        $basename = pathinfo($path, PATHINFO_FILENAME);
+        // Zpic V3 imgid 为 8 位大小写字母+数字
+        if (preg_match('/^[A-Za-z0-9]{8}$/', $basename)) {
+            return $basename;
+        }
+        return '';
+    }
 
     private function curlPost(string $url, array $postFields, array $headers = [])
     {
@@ -185,18 +273,33 @@ class ZpicDriver implements DriverInterface
             CURLOPT_POSTFIELDS     => $postFields,
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_HTTPHEADER     => $headers,
-            CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_MAXREDIRS      => 3,
-            CURLOPT_TIMEOUT        => 120,
+            CURLOPT_TIMEOUT        => 60,
             CURLOPT_SSL_VERIFYPEER => false,
             CURLOPT_SSL_VERIFYHOST => false,
         ]);
         $response = curl_exec($ch);
         $errno    = curl_errno($ch);
-        if ($errno) {
-            error_log('[PicUp][ZPic] cURL 错误：' . curl_error($ch));
-        }
         if (PHP_VERSION_ID < 80000) curl_close($ch);
         return $errno ? false : $response;
+    }
+
+    private function curlRequest(string $method, string $url, ?string $body, array $headers = []): string
+    {
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL            => $url,
+            CURLOPT_CUSTOMREQUEST  => $method,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER     => $headers,
+            CURLOPT_TIMEOUT        => 30,
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_SSL_VERIFYHOST => false,
+        ]);
+        if ($body !== null) {
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
+        }
+        $response = curl_exec($ch);
+        if (PHP_VERSION_ID < 80000) curl_close($ch);
+        return $response ?: '';
     }
 }

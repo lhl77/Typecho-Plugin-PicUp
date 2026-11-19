@@ -5,7 +5,7 @@
  *
  * @package PicUp
  * @author LHL
- * @version 1.3.4
+ * @version 1.3.3
  * @link https://picup.lhl.one
  */
 
@@ -670,7 +670,7 @@ class Plugin implements PluginInterface
                     CURLOPT_MAXREDIRS      => 3,
                     CURLOPT_TIMEOUT        => 30,
                     CURLOPT_CONNECTTIMEOUT => 10,
-                    CURLOPT_USERAGENT      => 'PicUp-Migrate/1.3.4',
+                    CURLOPT_USERAGENT      => 'PicUp-Migrate/1.3.3',
                 ]);
                 $ok   = curl_exec($ch);
                 $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -1428,7 +1428,7 @@ END_SCRIPT;
     /**
      * 静态资源的缓存版本号。
      *
-     * 用 `mtime-size` 而不是插件版本号：版本号改动不频繁（现在 1.3.4），改了文件但没发版时
+     * 用 `mtime-size` 而不是插件版本号：版本号改动不频繁（现在 1.3.3），改了文件但没发版时
      * 浏览器 / CDN 会一直吐旧文件（`picup-config.css` 曾经就没带任何版本号）。
      * 每次部署文件被覆盖 → mtime 变化 → URL 变化，一定能取到新内容。
      */
@@ -1469,7 +1469,7 @@ END_SCRIPT;
         }
 
         // 0. 顶部插件信息 & AdminBeautify 推荐
-        $pluginVersion = '1.3.4';
+        $pluginVersion = '1.3.3';
         try {
             $siteUrl = rtrim(Options::alloc()->siteUrl, '/');
         } catch (\Throwable $e) {
